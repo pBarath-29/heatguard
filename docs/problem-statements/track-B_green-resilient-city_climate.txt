@@ -1,0 +1,77 @@
+Track B
+
+Green & Resilient City: Climate Action for Singapore
+2025 was Singapore’s hottest year and wettest March on record, and 2026 is the Year of Climate Adaptation. The data is real, the urgency is now, and the open datasets are live.
+
+B1
+HeatGuard: Urban heat risk mapping for vulnerable communities
+The problem
+Urban heat islands are intensifying across dense residential estates. Elderly residents in lower-floor HDB flats — many without air-conditioning or facing high utility bills — are at greatest risk. Heat stress leads to excess hospitalisations, lost productivity and preventable deaths among the most vulnerable.
+
+What to build
+A real-time heat monitoring and risk intelligence platform combining island-wide temperature sensor data with demographics to identify the planning areas and blocks at highest risk and support proactive community alerts.
+
+Available datasets
+Dataset	Source	What it contains
+Air Temperature across Singapore (Real-time API)	NEA	5-minute readings across ~50 weather stations
+PM2.5 Air Quality (Real-time)	NEA	15-minute particulate readings by region
+HDB Elderly Population by Planning Area	HDB	Elderly density by block and planning area
+Rainfall across Singapore (Real-time API)	NEA	Station rainfall for heat-humidity correlation
+Senior Activity Centres (locations)	MSF	Community cooling refuge points
+What a winning demo looks like
+A live heat index dashboard across the weather station network
+An ML “Heat Risk Score” by planning area (temperature + elderly density + cooling access)
+Automated Low / Medium / High classification with tiered alert recommendations
+At least two real-time data streams integrated
+Stretch goals
+Cooling infrastructure simulation for the highest-risk zones
+Green space analysis using parks and cycling corridors as a cooling proxy
+Next-day heat risk forecast from forecast APIs and historical patterns
+B2
+FloodSense: Flash flood prediction & urban drainage intelligence
+The problem
+Singapore recorded its wettest March on record in 2025, with flash floods causing property damage, transport disruption and community distress. PUB drainage is extensive, but extreme rainfall is growing more frequent. Predictive flood intelligence would help residents, town councils and agencies prepare.
+
+What to build
+A predictive flash flood risk model using real-time and historical rainfall, flood-prone area records and live flood alerts to forecast which areas are most at risk and how that risk evolves. Build a training set from historical rainfall and flood co-occurrence, train a classifier, and wire live streams to score current risk.
+
+Available datasets
+Dataset	Source	What it contains
+Rainfall across Singapore (Real-time API)	NEA / PUB	5-minute rainfall readings from the station network
+Historical Rainfall Collections (2016–2024)	NEA	Multi-year data for model training
+Flood Alerts across Singapore (Real-time API)	PUB	Live flood alert events
+Flood Prone Areas (Annual)	PUB	PUB-designated flood-prone hectares, 2022–2025
+What a winning demo looks like
+An ML classifier predicting Low / Medium / High flood risk by zone
+A live risk dashboard updating as real-time rainfall streams in
+A 3-year time-series trend analysis of flood-prone areas
+Both historical batch data (training) and real-time streaming data (inference)
+Stretch goals
+Cascading impact: correlate flood events with LTA ridership disruption
+Climate projection layer using sea-level rise scenarios
+Uncertainty quantification with confidence intervals
+B3
+ZeroWaste Navigator: Singapore’s circular economy intelligence platform
+The problem
+Singapore generates over 7 million tonnes of waste annually. The Zero Waste Masterplan targets a 30% reduction by 2030 and Semakau landfill has a finite runway. Household recycling rates stay stubbornly low — partly because infrastructure coverage is uneven and contamination is high.
+
+What to build
+A platform analysing the waste and recycling landscape, identifying planning areas underserved by recycling infrastructure, and modelling the impact of targeted interventions on national recycling rates — geospatial analysis, trend modelling and scenario simulation in one dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Waste Disposed & Recycled (Annual)	SingStat / NEA	National waste tonnage and recycling totals
+Waste Management & Overall Recycling Rates (Annual)	SingStat	National recycling rate time series
+Recycling Bin Locations	NEA	Geospatial public bin locations
+E-Waste Collection Points (GeoJSON)	NEA	E-waste drop-off point locations
+Hawker Centres (GeoJSON)	NEA	Food waste context — hawker centre locations
+General Waste Collectors (Licensed)	NEA	Licensed collectors by waste class
+What a winning demo looks like
+Geospatial analysis of recycling bin coverage per 1,000 residents by planning area
+National waste and recycling trend analysis with an ML-projected trajectory to 2030
+The top 5 planning areas where investment would most improve recycling outcomes
+A clear visual “before vs. after intervention” comparison
+Stretch goals
+Route optimisation for collection logistics to cut carbon and cost
+Food waste estimation under hawker centre policy changes
+Recycling behaviour model to target campaigns by demographics

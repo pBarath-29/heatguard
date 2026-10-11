@@ -1,0 +1,32 @@
+Submission & demo
+Round 1 — idea submission
+Closes Tuesday, 6 October 2026, 11:59pm SGT. Round 1 is an idea submission; you do not need a working build yet. Submit through Devpost.
+
+A 1-page concept note or 3-slide pitch deck (PDF) covering: the problem statement you chose, your proposed solution, the datasets you will use, and your intended Databricks architecture.
+Team name and full member list: name, institution, course, year and email.
+Use the 3-slide template
+Every team submits the same three slides — Problem & why it matters, Solution & data, Databricks architecture & impact. An identical structure means judges compare slide 2 with slide 2, instead of hunting through free-form decks. Fill it in, keep it to three slides and export as PDF.
+
+Slide 1 — Problem & why it matters
+Slide 2 — Solution & data
+Slide 3 — Databricks architecture & impact
+Download the template (PowerPoint)
+View the template (PDF)
+Round 2 — Demo Day
+For the top 10 teams, due before Demo Day on 27 October 2026.
+
+Tips for a strong demo
+Scope aggressively — a polished end-to-end solution on one dataset beats a half-built solution across many.
+Tell a story — your dashboard should answer a clear question, not just display data.
+Show the pipeline — mentors want to see how data moves from source to insight.
+Handle messy data — real datasets have nulls, inconsistencies and edge cases.
+Make it actionable — who would use this, and what decision does it inform?
+Demo readiness checklist
+The final deployment owner can sign in and open every required resource.
+The app, endpoint, SQL warehouse, pipeline and data are ready in the final workspace.
+The main user journey has been tested from a fresh browser session.
+No token, password, private key or personal data is visible.
+The team can explain the problem, user, architecture, Databricks contribution and presenter handoffs.
+Third-party datasets, libraries, models and templates are credited.
+A screenshot or short recording is ready for the most failure-prone live step.
+The final link, repository and submission materials are accessible to judges.

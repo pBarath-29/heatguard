@@ -1,0 +1,80 @@
+Problem statements
+Three tracks, nine statements. All datasets are freely available on data.gov.sg, most with no login required.
+
+Track A
+
+Healthy Nation: Caring for an Ageing Singapore
+Singapore becomes officially “super-aged” in 2026 — 1 in 5 residents will be 65 or older. Social services, healthcare infrastructure and communities are under pressure to adapt faster than ever.
+
+A1
+SilverWatch: Predicting social isolation risk across Singapore
+The problem
+Social isolation among the elderly is a silent health crisis — a stronger predictor of premature death than obesity or smoking. Outreach by the Silver Generation Office and Active Ageing Centres is largely manual and coverage is uneven. As the elderly population surges past 1 million, data-driven prioritisation of social care resources is critical.
+
+What to build
+A data platform that ingests demographic and social care infrastructure data, models social isolation risk at HDB town and planning area level, and produces a decision-support tool for social workers and volunteer coordinators. Combine data engineering, a composite risk-scoring model, and a live BI dashboard that non-technical community workers can use.
+
+Available datasets
+Dataset	Source	What it contains
+Key Indicators on the Elderly (Annual)	SingStat	National elderly health, living and social indicators
+HDB Elderly & Future-Elderly Population	HDB	Block-level elderly population by age and sex
+Senior Activity Centres & Active Ageing Centres	MSF	Locations and capacity of community centres
+Households Assisted Through ComCare Schemes	MSF	Households receiving social assistance by area
+Resident Population 65+ by Living Arrangements	SingStat	Proportion living alone, with family, and so on
+What a winning demo looks like
+A geospatial heatmap of planning areas ranked by a composite isolation risk score
+An ML model combining elderly density, living-alone rates and AAC coverage gaps into a risk index
+A prioritised list of the top 10 planning areas for targeted outreach
+A dashboard a social worker or volunteer coordinator could actually use
+Stretch goals
+Resource allocation recommender: where should new AAC spots go to maximise coverage?
+Temporal projection: how isolation risk grows by 2030 on current demographic trends
+Governance layer: responsible data access controls in Unity Catalog
+A2
+DengueRadar: Real-time outbreak forecasting
+The problem
+Dengue is hyperendemic in Singapore, with outbreaks affecting tens of thousands of residents. Rising temperatures and erratic rainfall extend the Aedes breeding season. NEA cluster monitoring today is largely reactive — predictive risk intelligence could let communities act 2–4 weeks ahead.
+
+What to build
+A near-real-time pipeline combining live dengue cluster data, weather station readings and geospatial data into a forward-looking dengue risk forecast by planning area. Show streaming or incremental ingestion from live APIs, weather feature engineering, and a predictive model on an interactive map.
+
+Available datasets
+Dataset	Source	What it contains
+Dengue Clusters (GeoJSON)	NEA	Active cluster polygons with case counts
+Dengue Cases by Region	NEA	Historical counts by sub-region
+Rainfall across Singapore (Real-time API)	NEA	5-minute station rainfall readings
+Air Temperature across Singapore (Real-time API)	NEA	5-minute temperature readings island-wide
+Historical Rainfall Collections (2016–2024)	NEA	Multi-year rainfall history for training
+What a winning demo looks like
+A real-time dashboard of current cluster intensity mapped across Singapore
+A 2-week risk forecast model trained on weather signals and historical cases
+Low / Medium / High risk classification per planning area with explainable features
+Evidence the model beats a baseline such as a recent-history average
+Stretch goals
+Layer in hawker centre density or green space as environmental risk proxies
+Automated alerts when risk crosses a threshold
+Track experiments in MLflow and compare feature sets
+A3
+HealthPulse: Community healthcare demand forecasting
+The problem
+Under Healthier SG, MOH is shifting from hospital-centric to community-based care. But where should polyclinics, nursing homes and community health posts expand? Much planning relies on top-down projections rather than granular community demand signals — getting it wrong means wasted investment or critical care gaps.
+
+What to build
+A forecasting platform projecting community healthcare demand at planning area level over a 5-year horizon. Build a reproducible pipeline across MOH and population datasets, apply time-series or regression forecasting, and surface a geospatial planning dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Hospital Admissions (Public Sector, Monthly)	SingStat / MOH	Monthly inpatient admissions and day surgeries
+Health Facilities & Beds in Inpatient Facilities	MOH	Nursing homes, hospitals and beds by type
+HDB Elderly Population by Planning Area	HDB	Age and sex-segmented elderly population by block
+Total Population by Broad Age Group & Sex (Annual)	SingStat	National population distribution trends
+Healthcare Schemes and Subsidies	MOH	Active government care programmes by scheme
+What a winning demo looks like
+A 5-year demand forecast for community care at planning area level
+Supply vs. projected demand gap analysis in an interactive dashboard
+A map of the top 5 underserved areas needing infrastructure investment
+A clear methodology policymakers could trust and act on
+Stretch goals
+Policy impact modelling: demand reduction if Healthier SG hits prevention targets
+Unity Catalog access policy reflecting health data sensitivity
+Scenario toggles for optimistic, base-case and pessimistic ageing

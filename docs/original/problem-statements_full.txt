@@ -1,0 +1,258 @@
+Problem statements
+Three tracks, nine statements. All datasets are freely available on data.gov.sg, most with no login required.
+
+Track A
+
+Healthy Nation: Caring for an Ageing Singapore
+Singapore becomes officially “super-aged” in 2026 — 1 in 5 residents will be 65 or older. Social services, healthcare infrastructure and communities are under pressure to adapt faster than ever.
+
+A1
+SilverWatch: Predicting social isolation risk across Singapore
+The problem
+Social isolation among the elderly is a silent health crisis — a stronger predictor of premature death than obesity or smoking. Outreach by the Silver Generation Office and Active Ageing Centres is largely manual and coverage is uneven. As the elderly population surges past 1 million, data-driven prioritisation of social care resources is critical.
+
+What to build
+A data platform that ingests demographic and social care infrastructure data, models social isolation risk at HDB town and planning area level, and produces a decision-support tool for social workers and volunteer coordinators. Combine data engineering, a composite risk-scoring model, and a live BI dashboard that non-technical community workers can use.
+
+Available datasets
+Dataset	Source	What it contains
+Key Indicators on the Elderly (Annual)	SingStat	National elderly health, living and social indicators
+HDB Elderly & Future-Elderly Population	HDB	Block-level elderly population by age and sex
+Senior Activity Centres & Active Ageing Centres	MSF	Locations and capacity of community centres
+Households Assisted Through ComCare Schemes	MSF	Households receiving social assistance by area
+Resident Population 65+ by Living Arrangements	SingStat	Proportion living alone, with family, and so on
+What a winning demo looks like
+A geospatial heatmap of planning areas ranked by a composite isolation risk score
+An ML model combining elderly density, living-alone rates and AAC coverage gaps into a risk index
+A prioritised list of the top 10 planning areas for targeted outreach
+A dashboard a social worker or volunteer coordinator could actually use
+Stretch goals
+Resource allocation recommender: where should new AAC spots go to maximise coverage?
+Temporal projection: how isolation risk grows by 2030 on current demographic trends
+Governance layer: responsible data access controls in Unity Catalog
+A2
+DengueRadar: Real-time outbreak forecasting
+The problem
+Dengue is hyperendemic in Singapore, with outbreaks affecting tens of thousands of residents. Rising temperatures and erratic rainfall extend the Aedes breeding season. NEA cluster monitoring today is largely reactive — predictive risk intelligence could let communities act 2–4 weeks ahead.
+
+What to build
+A near-real-time pipeline combining live dengue cluster data, weather station readings and geospatial data into a forward-looking dengue risk forecast by planning area. Show streaming or incremental ingestion from live APIs, weather feature engineering, and a predictive model on an interactive map.
+
+Available datasets
+Dataset	Source	What it contains
+Dengue Clusters (GeoJSON)	NEA	Active cluster polygons with case counts
+Dengue Cases by Region	NEA	Historical counts by sub-region
+Rainfall across Singapore (Real-time API)	NEA	5-minute station rainfall readings
+Air Temperature across Singapore (Real-time API)	NEA	5-minute temperature readings island-wide
+Historical Rainfall Collections (2016–2024)	NEA	Multi-year rainfall history for training
+What a winning demo looks like
+A real-time dashboard of current cluster intensity mapped across Singapore
+A 2-week risk forecast model trained on weather signals and historical cases
+Low / Medium / High risk classification per planning area with explainable features
+Evidence the model beats a baseline such as a recent-history average
+Stretch goals
+Layer in hawker centre density or green space as environmental risk proxies
+Automated alerts when risk crosses a threshold
+Track experiments in MLflow and compare feature sets
+A3
+HealthPulse: Community healthcare demand forecasting
+The problem
+Under Healthier SG, MOH is shifting from hospital-centric to community-based care. But where should polyclinics, nursing homes and community health posts expand? Much planning relies on top-down projections rather than granular community demand signals — getting it wrong means wasted investment or critical care gaps.
+
+What to build
+A forecasting platform projecting community healthcare demand at planning area level over a 5-year horizon. Build a reproducible pipeline across MOH and population datasets, apply time-series or regression forecasting, and surface a geospatial planning dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Hospital Admissions (Public Sector, Monthly)	SingStat / MOH	Monthly inpatient admissions and day surgeries
+Health Facilities & Beds in Inpatient Facilities	MOH	Nursing homes, hospitals and beds by type
+HDB Elderly Population by Planning Area	HDB	Age and sex-segmented elderly population by block
+Total Population by Broad Age Group & Sex (Annual)	SingStat	National population distribution trends
+Healthcare Schemes and Subsidies	MOH	Active government care programmes by scheme
+What a winning demo looks like
+A 5-year demand forecast for community care at planning area level
+Supply vs. projected demand gap analysis in an interactive dashboard
+A map of the top 5 underserved areas needing infrastructure investment
+A clear methodology policymakers could trust and act on
+Stretch goals
+Policy impact modelling: demand reduction if Healthier SG hits prevention targets
+Unity Catalog access policy reflecting health data sensitivity
+Scenario toggles for optimistic, base-case and pessimistic ageing
+Track B
+
+Green & Resilient City: Climate Action for Singapore
+2025 was Singapore’s hottest year and wettest March on record, and 2026 is the Year of Climate Adaptation. The data is real, the urgency is now, and the open datasets are live.
+
+B1
+HeatGuard: Urban heat risk mapping for vulnerable communities
+The problem
+Urban heat islands are intensifying across dense residential estates. Elderly residents in lower-floor HDB flats — many without air-conditioning or facing high utility bills — are at greatest risk. Heat stress leads to excess hospitalisations, lost productivity and preventable deaths among the most vulnerable.
+
+What to build
+A real-time heat monitoring and risk intelligence platform combining island-wide temperature sensor data with demographics to identify the planning areas and blocks at highest risk and support proactive community alerts.
+
+Available datasets
+Dataset	Source	What it contains
+Air Temperature across Singapore (Real-time API)	NEA	5-minute readings across ~50 weather stations
+PM2.5 Air Quality (Real-time)	NEA	15-minute particulate readings by region
+HDB Elderly Population by Planning Area	HDB	Elderly density by block and planning area
+Rainfall across Singapore (Real-time API)	NEA	Station rainfall for heat-humidity correlation
+Senior Activity Centres (locations)	MSF	Community cooling refuge points
+What a winning demo looks like
+A live heat index dashboard across the weather station network
+An ML “Heat Risk Score” by planning area (temperature + elderly density + cooling access)
+Automated Low / Medium / High classification with tiered alert recommendations
+At least two real-time data streams integrated
+Stretch goals
+Cooling infrastructure simulation for the highest-risk zones
+Green space analysis using parks and cycling corridors as a cooling proxy
+Next-day heat risk forecast from forecast APIs and historical patterns
+B2
+FloodSense: Flash flood prediction & urban drainage intelligence
+The problem
+Singapore recorded its wettest March on record in 2025, with flash floods causing property damage, transport disruption and community distress. PUB drainage is extensive, but extreme rainfall is growing more frequent. Predictive flood intelligence would help residents, town councils and agencies prepare.
+
+What to build
+A predictive flash flood risk model using real-time and historical rainfall, flood-prone area records and live flood alerts to forecast which areas are most at risk and how that risk evolves. Build a training set from historical rainfall and flood co-occurrence, train a classifier, and wire live streams to score current risk.
+
+Available datasets
+Dataset	Source	What it contains
+Rainfall across Singapore (Real-time API)	NEA / PUB	5-minute rainfall readings from the station network
+Historical Rainfall Collections (2016–2024)	NEA	Multi-year data for model training
+Flood Alerts across Singapore (Real-time API)	PUB	Live flood alert events
+Flood Prone Areas (Annual)	PUB	PUB-designated flood-prone hectares, 2022–2025
+What a winning demo looks like
+An ML classifier predicting Low / Medium / High flood risk by zone
+A live risk dashboard updating as real-time rainfall streams in
+A 3-year time-series trend analysis of flood-prone areas
+Both historical batch data (training) and real-time streaming data (inference)
+Stretch goals
+Cascading impact: correlate flood events with LTA ridership disruption
+Climate projection layer using sea-level rise scenarios
+Uncertainty quantification with confidence intervals
+B3
+ZeroWaste Navigator: Singapore’s circular economy intelligence platform
+The problem
+Singapore generates over 7 million tonnes of waste annually. The Zero Waste Masterplan targets a 30% reduction by 2030 and Semakau landfill has a finite runway. Household recycling rates stay stubbornly low — partly because infrastructure coverage is uneven and contamination is high.
+
+What to build
+A platform analysing the waste and recycling landscape, identifying planning areas underserved by recycling infrastructure, and modelling the impact of targeted interventions on national recycling rates — geospatial analysis, trend modelling and scenario simulation in one dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Waste Disposed & Recycled (Annual)	SingStat / NEA	National waste tonnage and recycling totals
+Waste Management & Overall Recycling Rates (Annual)	SingStat	National recycling rate time series
+Recycling Bin Locations	NEA	Geospatial public bin locations
+E-Waste Collection Points (GeoJSON)	NEA	E-waste drop-off point locations
+Hawker Centres (GeoJSON)	NEA	Food waste context — hawker centre locations
+General Waste Collectors (Licensed)	NEA	Licensed collectors by waste class
+What a winning demo looks like
+Geospatial analysis of recycling bin coverage per 1,000 residents by planning area
+National waste and recycling trend analysis with an ML-projected trajectory to 2030
+The top 5 planning areas where investment would most improve recycling outcomes
+A clear visual “before vs. after intervention” comparison
+Stretch goals
+Route optimisation for collection logistics to cut carbon and cost
+Food waste estimation under hawker centre policy changes
+Recycling behaviour model to target campaigns by demographics
+Track C
+
+Liveable & Inclusive City: Housing, Mobility & Community
+Affordable, connected and inclusive living is under pressure from rising HDB prices, transport accessibility gaps, and threats to the hawker culture that binds communities together.
+
+C1
+FlatFair: HDB resale market intelligence & affordability forecasting
+The problem
+HDB resale prices have risen sharply over the past decade, creating real anxiety among young Singaporeans about homeownership. Despite one of the most data-rich housing markets in the world, buyers navigate it with limited transparent analytics — and the 2024 flat classification change shifted market dynamics again.
+
+What to build
+An end-to-end analytics platform on HDB resale transaction data surfacing price trends, affordability patterns and forward-looking forecasts by town and flat type — a full pipeline from raw transactions to an ML forecast, with a polished interactive dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Resale Flat Prices (Jan 2017 – present)	HDB	Town, flat type, floor area, storey, price — dataset ID d_8b84c4ee58e3cfc0ece0d773c8ca6abc
+HDB Annual Report 2025	HDB	Supply pipeline, policy context, market overview
+Total Population by Planning Area	SingStat	Demographic demand context
+What a winning demo looks like
+An interactive dashboard of price trends by town, flat type, storey range and year
+An ML forecast of resale prices for the next 6 months at town level
+An affordability index tracking prices against income benchmarks
+A production-quality pipeline handling nulls, outliers and schema evolution
+Stretch goals
+Fair value estimator: is a listed price above or below expected market value?
+BTO supply impact model on nearby resale transactions
+Unity Catalog governance with lineage and quality documentation
+C2
+MoveEasy: Mobility accessibility intelligence for inclusive communities
+The problem
+Singapore ranks among the world’s best public transport systems, yet accessibility gaps persist. Elderly residents, people with mobility challenges and underserved communities still struggle to reach hospitals, Active Ageing Centres and polyclinics. First and last-mile connectivity determines quality of life for the most vulnerable.
+
+What to build
+A mobility analytics platform identifying transport accessibility gaps across Singapore, combining geospatial data with demographics and ridership to produce an evidence-based accessibility score by planning area.
+
+Available datasets
+Dataset	Source	What it contains
+Cycling Path Network (GeoJSON)	LTA	Current cycling path coverage
+Master Plan 2025 Cycling Layers (GeoJSON)	URA	Planned future cycling network
+Public Transport Operation & Ridership (Annual)	SingStat / LTA	Annual ridership by mode and route usage
+Senior Activity Centres & Active Ageing Centres	MSF	Key community service destinations
+Childcare Centre Listings (GeoJSON)	ECDA	Locations of childcare services
+HDB Elderly Population by Planning Area	HDB	Elderly density for demand-weighted analysis
+What a winning demo looks like
+Distance from each area’s elderly population centroid to the nearest AAC, polyclinic and cycling path
+An accessibility score by planning area in a ranked dashboard
+The 10 areas with the highest elderly density and lowest accessibility
+A map that communicates findings without technical expertise
+Stretch goals
+Infrastructure simulation for one new cycling path or bus route
+Master Plan 2025 overlay showing future accessibility gains
+Extend the lens to childcare accessibility for working parents
+C3
+KopilamAI: Hawker culture, food access & community sustainability
+The problem
+Hawker centres are the beating heart of Singapore’s social fabric — affordable, culturally diverse meals and de facto community gathering spaces. Rising costs, an ageing hawker workforce and shrinking supply threaten the institution, while hawker food waste adds to the national waste challenge.
+
+What to build
+A platform analysing the distribution, accessibility and sustainability of the hawker network — identifying food access gaps and surfacing closure and food waste patterns that threaten hawker culture, told as an evidence-based story communities and policymakers could act on.
+
+Available datasets
+Dataset	Source	What it contains
+Hawker Centres (GeoJSON)	NEA	Locations, names, stall counts and attributes
+Dates of Hawker Centre Closures	NEA	Historical renovation and permanent closure dates
+Waste Disposed & Recycled (Annual)	SingStat / NEA	Food waste tonnage trends
+Recycling Bins (Locations)	NEA	Infrastructure context for sustainability analysis
+Total Population by Planning Area	SingStat	Demand-side denominator for coverage analysis
+Resale Flat Prices by Town	HDB	Affordability pressure context by area
+What a winning demo looks like
+A geospatial dashboard of hawker centre density per 10,000 residents by planning area
+A food access gap analysis for dense areas with low hawker coverage
+A trend analysis of closures over time — permanent vs. temporary
+A food waste estimation model tied to hawker activity and area demographics
+Stretch goals
+Site suitability model recommending locations for new hawker centres
+Social vulnerability multiplier: high elderly concentration plus low hawker density
+Economic modelling of affordability impact if hawker density drops
+Working with data.gov.sg
+Most datasets can be downloaded directly as CSV or GeoJSON from the dataset page, queried through the datastore API, or streamed live for weather, air quality, flood alerts and bus arrivals.
+
+https://data.gov.sg/api/action/datastore_search?resource_id=<dataset_id>&limit=100
+Recommended Databricks workflow
+1
+Data ingestion
+Ingest raw datasets from data.gov.sg APIs and CSVs into Delta Lake tables using Auto Loader or notebook-based ingestion with schema inference.
+
+2
+Data engineering
+Clean, join and transform raw data into analysis-ready tables. Apply data quality checks and document lineage.
+
+3
+Machine learning
+Build and train models on the prepared datasets. Use MLflow to track experiments, compare runs and register the best model.
+
+4
+Analytics & BI
+Build an interactive AI/BI dashboard that makes findings accessible to a non-technical audience and clearly actionable.
+
+5
+Governance (stretch)
+Catalogue datasets in Unity Catalog. Document sources, apply access controls appropriate to sensitivity, and show lineage from raw source to final model.

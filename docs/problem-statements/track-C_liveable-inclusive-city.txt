@@ -1,0 +1,77 @@
+Track C
+
+Liveable & Inclusive City: Housing, Mobility & Community
+Affordable, connected and inclusive living is under pressure from rising HDB prices, transport accessibility gaps, and threats to the hawker culture that binds communities together.
+
+C1
+FlatFair: HDB resale market intelligence & affordability forecasting
+The problem
+HDB resale prices have risen sharply over the past decade, creating real anxiety among young Singaporeans about homeownership. Despite one of the most data-rich housing markets in the world, buyers navigate it with limited transparent analytics — and the 2024 flat classification change shifted market dynamics again.
+
+What to build
+An end-to-end analytics platform on HDB resale transaction data surfacing price trends, affordability patterns and forward-looking forecasts by town and flat type — a full pipeline from raw transactions to an ML forecast, with a polished interactive dashboard.
+
+Available datasets
+Dataset	Source	What it contains
+Resale Flat Prices (Jan 2017 – present)	HDB	Town, flat type, floor area, storey, price — dataset ID d_8b84c4ee58e3cfc0ece0d773c8ca6abc
+HDB Annual Report 2025	HDB	Supply pipeline, policy context, market overview
+Total Population by Planning Area	SingStat	Demographic demand context
+What a winning demo looks like
+An interactive dashboard of price trends by town, flat type, storey range and year
+An ML forecast of resale prices for the next 6 months at town level
+An affordability index tracking prices against income benchmarks
+A production-quality pipeline handling nulls, outliers and schema evolution
+Stretch goals
+Fair value estimator: is a listed price above or below expected market value?
+BTO supply impact model on nearby resale transactions
+Unity Catalog governance with lineage and quality documentation
+C2
+MoveEasy: Mobility accessibility intelligence for inclusive communities
+The problem
+Singapore ranks among the world’s best public transport systems, yet accessibility gaps persist. Elderly residents, people with mobility challenges and underserved communities still struggle to reach hospitals, Active Ageing Centres and polyclinics. First and last-mile connectivity determines quality of life for the most vulnerable.
+
+What to build
+A mobility analytics platform identifying transport accessibility gaps across Singapore, combining geospatial data with demographics and ridership to produce an evidence-based accessibility score by planning area.
+
+Available datasets
+Dataset	Source	What it contains
+Cycling Path Network (GeoJSON)	LTA	Current cycling path coverage
+Master Plan 2025 Cycling Layers (GeoJSON)	URA	Planned future cycling network
+Public Transport Operation & Ridership (Annual)	SingStat / LTA	Annual ridership by mode and route usage
+Senior Activity Centres & Active Ageing Centres	MSF	Key community service destinations
+Childcare Centre Listings (GeoJSON)	ECDA	Locations of childcare services
+HDB Elderly Population by Planning Area	HDB	Elderly density for demand-weighted analysis
+What a winning demo looks like
+Distance from each area’s elderly population centroid to the nearest AAC, polyclinic and cycling path
+An accessibility score by planning area in a ranked dashboard
+The 10 areas with the highest elderly density and lowest accessibility
+A map that communicates findings without technical expertise
+Stretch goals
+Infrastructure simulation for one new cycling path or bus route
+Master Plan 2025 overlay showing future accessibility gains
+Extend the lens to childcare accessibility for working parents
+C3
+KopilamAI: Hawker culture, food access & community sustainability
+The problem
+Hawker centres are the beating heart of Singapore’s social fabric — affordable, culturally diverse meals and de facto community gathering spaces. Rising costs, an ageing hawker workforce and shrinking supply threaten the institution, while hawker food waste adds to the national waste challenge.
+
+What to build
+A platform analysing the distribution, accessibility and sustainability of the hawker network — identifying food access gaps and surfacing closure and food waste patterns that threaten hawker culture, told as an evidence-based story communities and policymakers could act on.
+
+Available datasets
+Dataset	Source	What it contains
+Hawker Centres (GeoJSON)	NEA	Locations, names, stall counts and attributes
+Dates of Hawker Centre Closures	NEA	Historical renovation and permanent closure dates
+Waste Disposed & Recycled (Annual)	SingStat / NEA	Food waste tonnage trends
+Recycling Bins (Locations)	NEA	Infrastructure context for sustainability analysis
+Total Population by Planning Area	SingStat	Demand-side denominator for coverage analysis
+Resale Flat Prices by Town	HDB	Affordability pressure context by area
+What a winning demo looks like
+A geospatial dashboard of hawker centre density per 10,000 residents by planning area
+A food access gap analysis for dense areas with low hawker coverage
+A trend analysis of closures over time — permanent vs. temporary
+A food waste estimation model tied to hawker activity and area demographics
+Stretch goals
+Site suitability model recommending locations for new hawker centres
+Social vulnerability multiplier: high elderly concentration plus low hawker density
+Economic modelling of affordability impact if hawker density drops

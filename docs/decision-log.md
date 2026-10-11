@@ -1,0 +1,36 @@
+# HeatGuard — decision log
+
+Shared record of what we learned, what we decided and why, and open questions (requested by the DAISI organisers). Newest entries at the top of each section.
+
+## Decisions
+
+| Date | Decision | Why | Alternatives considered |
+|---|---|---|---|
+| 11 Oct 2026 | Ingest directly from data.gov.sg inside Databricks (scheduled job), no external poller | Day-1 check passed: live APIs, history (`?date=`), datastore and S3 file downloads all reachable from Free Edition serverless | Laptop / GitHub Actions poller uploading to a volume |
+| 11 Oct 2026 | Advisory wording model: `databricks-meta-llama-3-3-70b-instruct` (fallback `databricks-gpt-oss-120b`) | Available on our Free Edition workspace; strong multilingual instruction-following | Other listed endpoints (Llama 4 Maverick, Qwen, Gemma) |
+| 11 Oct 2026 | Demo workspace = shared team Google account; catalog `workspace`, schema `heatguard`, volume `raw` | One shared workspace keeps all demo assets in one place | Separate workspaces per member |
+| 29 Sep 2026 | Actions come from a fixed rulebook; the LLM only rewrites the wording | No data exists on which outreach actions reduce heat illness, so an AI choosing actions would be guessing; rules are transparent and easy for coordinators to adjust | LLM-chosen actions |
+| 29 Sep 2026 | Outputs are area-level only (subzone); no personal data | Competition rules forbid personal data; coordinators already hold client lists, so HeatGuard says *where and when* and the team's own list says *who* | Block- or person-level targeting |
+| 29 Sep 2026 | Cool spaces = Community Clubs + public libraries | Both are air-conditioned and have location datasets on data.gov.sg; parks and hawker centres are outdoors and hot at 2–4 pm | Parks, hawker centres, the 2016 Senior Activity Centre layer |
+| 29 Sep 2026 | Use Census 2020 at its real granularity: 65+ and dwelling type by subzone; one-person households and daily-activity difficulty by planning area (all ages) | Those are the only open tables; we state the limit instead of overclaiming "seniors living alone per subzone" | HDB elderly data (town-level, ends 2018) |
+| 23 Sep 2026 | Main heat signal = NEA WBGT (30 stations, 15-min, Feb 2025+) with NEA's own Low / Moderate / High bands | Official heat-stress measure; reusing NEA's bands aids adoption | Air temperature only (16 stations) |
+| 23 Sep 2026 | Dropped PM2.5 from the core design | Hourly, 5 regions only; adds little to heat risk | Second live stream (kept as optional) |
+| 23 Sep 2026 | Chose problem B1 HeatGuard | Strongest data fit, policy timing (Year of Climate Adaptation, super-aged 2026), originality; see `reports/DAISI problem statement selection.md` | A1 SilverWatch (runner-up) |
+
+## What we learned
+
+- 11 Oct 2026: WBGT history on the API starts **16 Jan 2025** (not Feb 2025 as first thought); days with no data return error code 17 ("Data not found"), which the backfill treats as empty. Only **8 stations** reported in early 2025 vs **30** today, so early history covers fewer places.
+- 11 Oct 2026: Census "household size" and "daily-activity difficulty" tables cover only the **30 largest planning areas** (plus a national total), not all 55. Age and dwelling-type tables cover all subzones; "-" in them means zero.
+- 11 Oct 2026: Static layers: 332 subzones (MP2019), 125 Community Clubs, 27 public libraries. CC/library details sit inside an HTML table in the GeoJSON `Description` field and must be unpacked.
+
+- 11 Oct 2026: Day-1 setup check (notebook `00_setup`): all data.gov.sg endpoints OK (WBGT live + history, air temperature, humidity, 24-hour forecast, datastore, S3 file download); H3, `st_point` and `st_distancesphere` work on serverless; 12 serving endpoints available (Llama 3.3 70B, Llama 4 Maverick, GPT-OSS 20B/120B, Qwen, Gemma, DeepSeek, embedding models).
+- 23 Sep 2026: Several datasets in the brief differ from their descriptions (16 temperature stations, not ~50; PM2.5 hourly by 5 regions; HDB elderly data is town-level and ends 2018).
+- 23 Sep 2026: The data.gov.sg API allows only 3–4 rapid calls without a key; an API key is needed for backfill.
+
+## Challenges and open questions
+
+- [x] Can Databricks Free Edition serverless reach `api-open.data.gov.sg`? **Yes (11 Oct)**
+- [x] Which Foundation Model API model is available on Free Edition? **12 endpoints; using Llama 3.3 70B (11 Oct)**
+- [x] Get a data.gov.sg API key and store it as a Databricks secret: **Production key created 11 Oct; stored as secret `heatguard/datagov_api_key` via Databricks CLI (profile `heatguard`); header `x-api-key` confirmed (15/15 rapid calls OK)**
+- [ ] Validate the action rulebook against NEA heat-stress advisory guidance and, ideally, an AAC coordinator
+- [ ] Is SingStat's June 2025 planning-area population file downloadable, to refresh Census 2020?

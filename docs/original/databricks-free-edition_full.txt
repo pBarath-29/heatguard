@@ -1,0 +1,131 @@
+Databricks Free Edition
+Free Edition is a no-cost, serverless workspace for learning and prototyping with data and AI. It includes usage quotas and is intended for non-commercial use.
+
+Databricks Free Edition workspace
+01
+Create your account
+Sign up for Databricks Free Edition with your preferred sign-in method. An existing Free Edition account works too.
+
+02
+Open your workspace
+Complete the welcome flow and confirm you can create a notebook, start the SQL warehouse and navigate the workspace.
+
+03
+Set up the team
+Let every teammate explore in their own Free Edition workspace, then choose one workspace as the final demo workspace.
+
+04
+Deploy early
+If you are building an app, get a small version running in the final workspace before adding features.
+
+05
+Prepare the demo state
+Test the exact path you will show, keep required data in the final workspace, and record a fallback for any live step.
+
+Create a Free Edition account
+What you can build
+An AI app or agent using Databricks Apps, Foundation Model APIs and model serving.
+An analytics experience using notebooks, SQL, dashboards and Genie spaces.
+A data pipeline that ingests, cleans and transforms data with Lakeflow.
+A database-backed app using Lakebase and Databricks Apps.
+An ML experiment tracked and evaluated with MLflow.
+A practical build path
+Define the user and problem in one sentence: who has it, what they need, how you help.
+Prepare a small dataset you can load, query and reproduce before scaling up.
+Build one end-to-end slice — data, core logic and user-facing output — before extras.
+Add the Databricks capability that matters because it improves the solution, not to pad the feature count.
+Deploy and rehearse from the final workspace, within the organiser’s time limit.
+Use AI and data responsibly
+Never upload confidential, customer or personal data you do not have permission to use, or any credential.
+Review AI-generated code, SQL, citations and outputs, and test the cases that matter to your demo.
+Credit datasets, libraries, models and templates in your submission.
+Be clear with judges when data is synthetic, a response is cached, or a feature is a prototype.
+Limits & quotas to plan around
+Free Edition is serverless-only and governed by fair-usage quotas. When a quota is exceeded, the affected compute can become unavailable for the rest of the day, and in extreme cases the rest of the month. Keep the project small and test the final flow before the demo.
+
+SQL warehouse: one serverless warehouse at 2X-Small size.
+Jobs: up to five concurrent job tasks per account.
+Lakeflow pipelines: one active pipeline per supported pipeline type.
+Model serving: limited active endpoints; no GPU serving and no provisioned throughput.
+AI Search: one endpoint and one search unit; Direct Vector Access is not supported.
+Databricks Apps: up to three apps per account; apps can auto-stop after 24 hours and be restarted.
+Lakebase: one project per account, with scale-to-zero behaviour.
+Workspace administration: one workspace and one metastore; no account APIs, SSO or SCIM.
+Languages and features: no R or Scala, no custom workspace storage, online tables or clean rooms.
+Service level: non-commercial use, with no support SLA or guaranteed reliability.
+How to conserve quota
+Work locally when practical, then deploy to Free Edition regularly.
+Deploy once early to confirm the real deployment path.
+Use a representative data sample that proves the idea without wasted compute.
+Stop what you are not using — idle notebooks, jobs, pipelines, apps and endpoints.
+If something stops working
+Compute is unavailable
+Stop unused resources, reduce the workload, and check whether the daily quota needs time to reset.
+A model is unavailable
+Select another available pay-per-token model and re-test the response format.
+A teammate cannot access the final state
+Confirm they were invited to the selected demo workspace and that shared assets live there.
+The live path still fails
+Show the prepared fallback, explain what the audience is seeing, and continue with the product story.
+Submission & demo
+Round 1 — idea submission
+Closes Tuesday, 6 October 2026, 11:59pm SGT. Round 1 is an idea submission; you do not need a working build yet. Submit through Devpost.
+
+A 1-page concept note or 3-slide pitch deck (PDF) covering: the problem statement you chose, your proposed solution, the datasets you will use, and your intended Databricks architecture.
+Team name and full member list: name, institution, course, year and email.
+Use the 3-slide template
+Every team submits the same three slides — Problem & why it matters, Solution & data, Databricks architecture & impact. An identical structure means judges compare slide 2 with slide 2, instead of hunting through free-form decks. Fill it in, keep it to three slides and export as PDF.
+
+Slide 1 — Problem & why it matters
+Slide 2 — Solution & data
+Slide 3 — Databricks architecture & impact
+Download the template (PowerPoint)
+View the template (PDF)
+Round 2 — Demo Day
+For the top 10 teams, due before Demo Day on 27 October 2026.
+
+Tips for a strong demo
+Scope aggressively — a polished end-to-end solution on one dataset beats a half-built solution across many.
+Tell a story — your dashboard should answer a clear question, not just display data.
+Show the pipeline — mentors want to see how data moves from source to insight.
+Handle messy data — real datasets have nulls, inconsistencies and edge cases.
+Make it actionable — who would use this, and what decision does it inform?
+Demo readiness checklist
+The final deployment owner can sign in and open every required resource.
+The app, endpoint, SQL warehouse, pipeline and data are ready in the final workspace.
+The main user journey has been tested from a fresh browser session.
+No token, password, private key or personal data is visible.
+The team can explain the problem, user, architecture, Databricks contribution and presenter handoffs.
+Third-party datasets, libraries, models and templates are credited.
+A screenshot or short recording is ready for the most failure-prone live step.
+The final link, repository and submission materials are accessible to judges.
+Judging criteria
+Both rounds are scored against published criteria. Judges' decisions are final.
+
+Round 1 — idea submission
+Criterion	Weight	What judges look for
+Problem fit & social impact	30%	Clearly addresses the chosen problem statement, with a real, describable benefit.
+Solution quality & originality	30%	A thoughtful approach, not a generic dashboard.
+Data & technical feasibility	25%	Named open datasets, a credible Databricks architecture, and buildable in two weeks.
+Clarity of submission	15%	Concise, well-structured concept note or deck.
+Demo Day — final solution
+Criterion	Weight	What judges look for
+Social impact	30%	Who benefits, how much, and whether the solution could realistically be adopted.
+Technical execution on Databricks	30%	A working end-to-end pipeline: ingestion, transformation, governance, analytics or AI.
+Solution & user experience	20%	A usable dashboard, app or interface a non-technical stakeholder could act on.
+Data rigour	10%	Sound use of Singapore open data, handling of messy data, and honest limitations.
+Presentation	10%	A clear story, a confident live demo and a well-handled Q&A.
+Official resources
+Databricks Free Edition
+Overview and account creation
+Foundation Model APIs
+Hosted model endpoints and supported clients
+Databricks AI Dev Kit
+Databricks-specific tools and implementation patterns
+data.gov.sg
+Every dataset in these problem statements
+data.gov.sg Developer Guide
+Full API documentation for live data
+Databricks Training
+Self-paced and instructor-led learning
+Ready to register?

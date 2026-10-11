@@ -1,0 +1,23 @@
+# Downloaded / generated data stays out of git (re-create with the notebooks)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Never commit credentials
+*.env
+.env*
+.databrickscfg
+*token*
+*secret*
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+__pycache__/
+*.pyc
+
+# Organiser correspondence (marked confidential)
+docs/stage2/selection-email.txt

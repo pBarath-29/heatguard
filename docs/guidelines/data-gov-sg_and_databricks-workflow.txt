@@ -1,0 +1,23 @@
+Working with data.gov.sg
+Most datasets can be downloaded directly as CSV or GeoJSON from the dataset page, queried through the datastore API, or streamed live for weather, air quality, flood alerts and bus arrivals.
+
+https://data.gov.sg/api/action/datastore_search?resource_id=<dataset_id>&limit=100
+Recommended Databricks workflow
+1
+Data ingestion
+Ingest raw datasets from data.gov.sg APIs and CSVs into Delta Lake tables using Auto Loader or notebook-based ingestion with schema inference.
+
+2
+Data engineering
+Clean, join and transform raw data into analysis-ready tables. Apply data quality checks and document lineage.
+
+3
+Machine learning
+Build and train models on the prepared datasets. Use MLflow to track experiments, compare runs and register the best model.
+
+4
+Analytics & BI
+Build an interactive AI/BI dashboard that makes findings accessible to a non-technical audience and clearly actionable.
+
+5
+Governance (stretch)
