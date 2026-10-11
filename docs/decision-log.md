@@ -6,6 +6,7 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 | Date | Decision | Why | Alternatives considered |
 |---|---|---|---|
+| 11 Oct 2026 | **Paused** the live ingestion schedule for now (job kept, unpause when needed) | Save Free Edition quota while building the pipeline; history is already loaded | Keep running every 15 min |
 | 11 Oct 2026 | Live ingestion job `heatguard-live-ingest` (job 1098458350267132) runs `01_ingest_live` every 15 min (Asia/Singapore), serverless, 1 retry, no overlapping runs | WBGT updates every 15 min; keeps "Now" tab and forecast inputs fresh; shows judges a real live stream | 30- or 60-min schedule if Free Edition quota becomes a problem |
 | 11 Oct 2026 | Skip temperature/humidity history backfill (step 14) for now | Model mainly needs WBGT history + NEA forecast, which we have; saves quota. Live job still collects temperature/humidity going forward | Backfill 2023–2024 yearly files |
 | 11 Oct 2026 | Ingest directly from data.gov.sg inside Databricks (scheduled job), no external poller | Day-1 check passed: live APIs, history (`?date=`), datastore and S3 file downloads all reachable from Free Edition serverless | Laptop / GitHub Actions poller uploading to a volume |
