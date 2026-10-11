@@ -19,6 +19,12 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 ## What we learned
 
+- 11 Oct 2026: **Backfill complete.** WBGT: 633 days (16 Jan 2025 → 10 Oct 2026), ~1.01M station readings. 24-hour forecast: 632 days (missing 2025-07-20).
+  - **NEA heat-stress bands, measured from the data:** Low < 31.0 °C, Moderate 31.0–32.9 °C, High ≥ 33.0 °C. We use these exact cut-offs.
+  - **High is rare:** 2,056 High readings (0.2%), 40,175 Moderate (4%). Peaks Apr–Jun and Sep–Oct; highest 36.6 °C (Sep 2026). The model must handle this imbalance.
+  - **Messy data found:** 2,879 readings (0.3%) have `NA` instead of a value; 21 days have fewer than 96 records (first day 16 Jan 2025 has only 2); one reading as low as 14.3 °C. Pipeline quality checks must drop these.
+  - **Network grew** from 8 stations (Jan 2025) → 15 (Sep 2025) → 20 (Jan 2026) → 27 (Apr 2026) → 30 (Aug 2026). Older history covers fewer places.
+
 - 11 Oct 2026: WBGT history on the API starts **16 Jan 2025** (not Feb 2025 as first thought); days with no data return error code 17 ("Data not found"), which the backfill treats as empty. Only **8 stations** reported in early 2025 vs **30** today, so early history covers fewer places.
 - 11 Oct 2026: Census "household size" and "daily-activity difficulty" tables cover only the **30 largest planning areas** (plus a national total), not all 55. Age and dwelling-type tables cover all subzones; "-" in them means zero.
 - 11 Oct 2026: Static layers: 332 subzones (MP2019), 125 Community Clubs, 27 public libraries. CC/library details sit inside an HTML table in the GeoJSON `Description` field and must be unpacked.
