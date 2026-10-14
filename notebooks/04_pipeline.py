@@ -711,22 +711,16 @@ def gold_subzone_conditions():
     heat = (blend(latest, "wbgt_latest_c", "latest_reading_ts")
             .join(blend(peak, "wbgt_afternoon_peak_c", "peak_date_sgt"), "subzone_name", "full"))
 
-    if spark.catalog.tableExists(ML_FORECAST_TABLE):
-        fc = spark.read.table(ML_FORECAST_TABLE)
-        newest = fc.agg(F.max("target_date").alias("t"))
-        fc = (fc.join(newest, fc.target_date == newest.t)
-              .join(peak_day, F.col("target_date") > F.col("d"))          # only a genuine forecast (after the latest observed day)
-              .select("station_id", F.col("predicted_peak_wbgt_c").alias("v"), "target_date",
-                      "prob_moderate_plus", "prob_high", "model_version"))
-        fc_sz = (blend(fc, "wbgt_forecast_c", "target_date", more=("prob_moderate_plus", "prob_high"))
-                 .crossJoin(fc.groupBy().agg(F.max("model_version").alias("forecast_model_version"))))
-        heat = heat.join(fc_sz.withColumnRenamed("target_date", "forecast_target_date"), "subzone_name", "left")
-    else:
-        heat = (heat.withColumn("wbgt_forecast_c", F.lit(None).cast("double"))
-                    .withColumn("forecast_target_date", F.lit(None).cast("date"))
-                    .withColumn("prob_moderate_plus", F.lit(None).cast("double"))
-                    .withColumn("prob_high", F.lit(None).cast("double"))
-                    .withColumn("forecast_model_version", F.lit(None).cast("string")))
+    # ml_wbgt_forecast always exists (created empty by 00_setup / 06_score_forecast); while empty, the list falls back to observed heat
+    fc = spark.read.table(ML_FORECAST_TABLE)
+    newest = fc.agg(F.max("target_date").alias("t"))
+    fc = (fc.join(newest, fc.target_date == newest.t)
+          .join(peak_day, F.col("target_date") > F.col("d"))          # only a genuine forecast (after the latest observed day)
+          .select("station_id", F.col("predicted_peak_wbgt_c").alias("v"), "target_date",
+                  "prob_moderate_plus", "prob_high", "model_version"))
+    fc_sz = (blend(fc, "wbgt_forecast_c", "target_date", more=("prob_moderate_plus", "prob_high"))
+             .crossJoin(fc.groupBy().agg(F.max("model_version").alias("forecast_model_version"))))
+    heat = heat.join(fc_sz.withColumnRenamed("target_date", "forecast_target_date"), "subzone_name", "left")
 
     for c in ["wbgt_latest_c", "wbgt_afternoon_peak_c", "wbgt_forecast_c"]:
         heat = heat.withColumn(c, F.round(c, 1))
