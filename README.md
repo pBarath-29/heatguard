@@ -15,7 +15,8 @@ Student hackathon: build on **Databricks Free Edition** using Singapore open dat
 ## What's built (as of 14 Oct 2026)
 | Piece | Where |
 |---|---|
-| **App** for coordinators (check-in list, Why here?, heat & haze now, Genie chat, forecast accuracy) | [app/](app/) · https://heatguard-7474645045833960.aws.databricksapps.com |
+| **Website** for coordinators — main (FastAPI + React): check-in list, Why here?, heat & haze now, Genie chat, forecast accuracy, message writer | [webapp/](webapp/) · https://heatguard-web-7474645045833960.aws.databricksapps.com |
+| Backup app (Streamlit), same features | [app/](app/) · https://heatguard-7474645045833960.aws.databricksapps.com |
 | **Pipeline** bronze → silver → gold with data-quality expectations | [notebooks/04_pipeline.py](notebooks/04_pipeline.py) · pipeline `heatguard-pipeline` |
 | **Forecast model** (tomorrow's afternoon peak WBGT + chance of High heat) in MLflow / Unity Catalog | [notebooks/05_forecast_model.py](notebooks/05_forecast_model.py) · `workspace.heatguard.wbgt_peak_forecaster@champion` |
 | **Daily job** at 6:45 pm SGT: refresh data → pipeline → forecast → pipeline | `heatguard-daily` |
@@ -42,7 +43,8 @@ data/
   raw/                 downloads from data.gov.sg
   processed/           cleaned / joined outputs
 notebooks/             Databricks notebooks (00 setup → 06 daily forecast)
-app/                   Databricks App (Streamlit)
+webapp/                Main website: FastAPI backend + React frontend (Databricks App heatguard-web)
+app/                   Backup Databricks App (Streamlit)
 genie/                 Genie space definition
 reports/, research_notes/   problem-selection research
 ```
