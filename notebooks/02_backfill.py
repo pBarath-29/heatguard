@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 02 · Backfill history (heat stress + NEA forecasts)
+# MAGIC # 02 · Backfill history (heat stress, NEA forecasts, haze)
 # MAGIC
 # MAGIC Downloads past data from the data.gov.sg real-time APIs into the `raw` volume, one file per day:
 # MAGIC
@@ -8,6 +8,8 @@
 # MAGIC |---|---|---|
 # MAGIC | `raw/wbgt/` | Wet Bulb Globe Temperature (heat stress), every 15 min, from 16 Jan 2025 | 96 readings, 4 pages |
 # MAGIC | `raw/forecast_24h/` | NEA 24-hour forecast | ~8 records, 1 call |
+# MAGIC | `raw/psi/` | Pollutant Standards Index (haze), hourly, 5 regions | 24 records, 1 call |
+# MAGIC | `raw/pm25/` | PM2.5 (haze), hourly, 5 regions | 24 records, 1 call |
 # MAGIC
 # MAGIC Each file is JSON Lines (one API record per line), the same layout the live job writes, so one Auto Loader stream reads both.
 # MAGIC
@@ -31,6 +33,9 @@ END = datetime.date.today() - datetime.timedelta(days=1)   # today's data comes 
 SOURCES = {
     "wbgt":         {"url": f"{BASE}/weather?api=wbgt", "list_key": "records"},
     "forecast_24h": {"url": f"{BASE}/twenty-four-hr-forecast", "list_key": "records"},
+    # haze: each line also carries the region list (5 regions with label locations), same layout as the live job
+    "psi":          {"url": f"{BASE}/psi", "list_key": "items", "keep": ["regionMetadata"]},
+    "pm25":         {"url": f"{BASE}/pm25", "list_key": "items", "keep": ["regionMetadata"]},
 }
 for name in SOURCES:
     dbutils.fs.mkdirs(f"{RAW}/{name}")
@@ -65,7 +70,8 @@ def fetch_day(source, day):
     records, token = [], None
     while True:
         data = get_page(url + (f"&paginationToken={requests.utils.quote(token)}" if token else ""))
-        records.extend(data.get(cfg["list_key"]) or [])
+        extra = {k: data.get(k) for k in cfg.get("keep", [])}
+        records.extend({**extra, **rec} for rec in (data.get(cfg["list_key"]) or []))
         token = data.get("paginationToken")
         time.sleep(0.35)                    # stays under the production limit (30 calls / 10 s)
         if not token:

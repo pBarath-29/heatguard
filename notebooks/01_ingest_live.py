@@ -12,6 +12,8 @@
 # MAGIC | `raw/four_day_outlook/` | 4-day outlook | one outlook record |
 # MAGIC | `raw/air_temperature/` | Air temperature | one timestamp with all station values, plus the station list |
 # MAGIC | `raw/humidity/` | Relative humidity | one timestamp with all station values, plus the station list |
+# MAGIC | `raw/psi/` | Pollutant Standards Index (haze), hourly, 5 regions | one hourly record with all PSI measures, plus the region list |
+# MAGIC | `raw/pm25/` | PM2.5 (haze), hourly, 5 regions | one hourly record, plus the region list |
 # MAGIC
 # MAGIC Duplicates (the same reading fetched by two runs) are removed later in the pipeline, so overlapping runs are harmless.
 
@@ -35,12 +37,19 @@ def station_readings(data):
     return [{"readingType": data.get("readingType"), "readingUnit": data.get("readingUnit"),
              "stations": stations, **r} for r in (data.get("readings") or [])]
 
+def region_items(data):
+    """psi / pm25: one line per hourly item, carrying the region list (name + label location)."""
+    regions = data.get("regionMetadata") or []
+    return [{"regionMetadata": regions, **i} for i in (data.get("items") or [])]
+
 SOURCES = {
     "wbgt":              (f"{BASE}/weather?api=wbgt", records),
     "forecast_24h":      (f"{BASE}/twenty-four-hr-forecast", records),
     "four_day_outlook":  (f"{BASE}/four-day-outlook", records),
     "air_temperature":   (f"{BASE}/air-temperature", station_readings),
     "humidity":          (f"{BASE}/relative-humidity", station_readings),
+    "psi":               (f"{BASE}/psi", region_items),
+    "pm25":              (f"{BASE}/pm25", region_items),
 }
 
 # COMMAND ----------

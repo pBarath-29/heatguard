@@ -6,6 +6,7 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 | Date | Decision | Why | Alternatives considered |
 |---|---|---|---|
+| 14 Oct 2026 | Added haze data: NEA **PSI** and **PM2.5** (hourly, 5 regions) to the live job and the backfill (`raw/psi/`, `raw/pm25/`) | Mentor (Loy, 13 Oct) suggested haze; haze plus heat adds to the strain on seniors, and both are cheap to collect (1 call per day of history). Reverses the 23 Sep decision to drop PM2.5. Haze will be a **factor in the risk score** (not just a warning flag); weighting still to design, at region level (5 regions) | Leave haze out (23 Sep decision); haze as a warning flag only |
 | 11 Oct 2026 | **Paused** the live ingestion schedule for now (job kept, unpause when needed) | Save Free Edition quota while building the pipeline; history is already loaded | Keep running every 15 min |
 | 11 Oct 2026 | Live ingestion job `heatguard-live-ingest` (job 1098458350267132) runs `01_ingest_live` every 15 min (Asia/Singapore), serverless, 1 retry, no overlapping runs | WBGT updates every 15 min; keeps "Now" tab and forecast inputs fresh; shows judges a real live stream | 30- or 60-min schedule if Free Edition quota becomes a problem |
 | 11 Oct 2026 | Skip temperature/humidity history backfill (step 14) for now | Model mainly needs WBGT history + NEA forecast, which we have; saves quota. Live job still collects temperature/humidity going forward | Backfill 2023–2024 yearly files |
