@@ -21,7 +21,7 @@
 # MAGIC **Two ways to run it:**
 # MAGIC - **Full backfill** (default: `start_date` = 2025-01-16, `refresh_days` = 0): fetches every missing day up to yesterday. **Resumable** — days
 # MAGIC   already saved are skipped, so if it stops, just run it again. With the production API key the full run takes about 30 minutes.
-# MAGIC - **Daily refresh** (used by the `heatguard-daily` job: `start_date` = a few days ago, `refresh_days` = 1): also re-fetches **today and
+# MAGIC - **Daily refresh** (used by the `heatguard-daily` job: `start_date` = `recent`, `refresh_days` = 1): also re-fetches **today and
 # MAGIC   yesterday**, which are still filling up, so the evening forecast uses today's complete afternoon.
 
 # COMMAND ----------
@@ -30,7 +30,8 @@
 # MAGIC ## 1. Settings
 # MAGIC
 # MAGIC **Parameters** (widgets at the top of the notebook, or `base_parameters` when run by a job):
-# MAGIC - `start_date` — first day to fetch (default: 16 Jan 2025, the first day of WBGT history on the API, checked 11 Oct 2026).
+# MAGIC - `start_date` — first day to fetch (default: 16 Jan 2025, the first day of WBGT history on the API, checked 11 Oct 2026),
+# MAGIC   or `recent` for the last 3 days (used by the daily job, so it only checks a few days instead of 600+).
 # MAGIC - `refresh_days` — how many recent days to **re-fetch every run** (0 = none). Recent days are saved as new `recent_<day>_<time>.jsonl`
 # MAGIC   files rather than overwriting, because Auto Loader only reads each file once; the pipeline removes the duplicate readings.
 # MAGIC   Once a day falls out of the refresh window, a complete `history_<day>.jsonl` file is fetched for it as normal.
@@ -52,7 +53,8 @@ HEADERS = {"x-api-key": API_KEY}
 BASE = "https://api-open.data.gov.sg/v2/real-time/api"
 
 TODAY_SGT = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).date()
-START = datetime.date.fromisoformat(dbutils.widgets.get("start_date").strip() or "2025-01-16")
+_start = dbutils.widgets.get("start_date").strip() or "2025-01-16"
+START = TODAY_SGT - datetime.timedelta(days=3) if _start == "recent" else datetime.date.fromisoformat(_start)
 REFRESH_DAYS = int(dbutils.widgets.get("refresh_days").strip() or 0)
 REFRESH_FROM = TODAY_SGT - datetime.timedelta(days=REFRESH_DAYS) if REFRESH_DAYS > 0 else None
 END = TODAY_SGT if REFRESH_DAYS > 0 else TODAY_SGT - datetime.timedelta(days=1)
