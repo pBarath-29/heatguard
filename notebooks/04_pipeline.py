@@ -2,17 +2,42 @@
 # MAGIC %md
 # MAGIC # 04 · HeatGuard pipeline (Lakeflow Declarative Pipeline)
 # MAGIC
-# MAGIC This notebook is the source of the **`heatguard-pipeline`** pipeline. Don't run it cell by cell; start the pipeline instead.
+# MAGIC **What this notebook is:** the source code of the **`heatguard-pipeline`** pipeline. It is not run cell by cell. Instead, the pipeline
+# MAGIC (Jobs & Pipelines → `heatguard-pipeline`) reads the whole notebook, works out which table depends on which, and builds them in the right order.
 # MAGIC
-# MAGIC | Layer | Tables | What happens |
+# MAGIC **Why a declarative pipeline:** we only describe *what* each table should contain. Databricks takes care of the order,
+# MAGIC incremental loading of new files, retries, and — most importantly for us — **data-quality expectations** (rules that drop
+# MAGIC or flag bad rows and count them) and **lineage** (a diagram showing how every number on the check-in list traces back to NEA and Census data).
+# MAGIC
+# MAGIC ### The medallion layers
+# MAGIC
+# MAGIC | Layer | Purpose | Tables |
 # MAGIC |---|---|---|
-# MAGIC | **Bronze** | `bronze_wbgt`, `bronze_forecast_24h`, `bronze_psi`, `bronze_pm25`, `bronze_air_temperature`, `bronze_humidity` | Auto Loader picks up new JSON Lines files from the `raw` volume (backfill + live job). Kept as received. |
-# MAGIC | **Silver** | `silver_wbgt`, `silver_wbgt_stations`, `silver_wbgt_daily_peak`, `silver_psi`, `silver_pm25`, `silver_haze_regions`, `silver_forecast_24h`, `silver_forecast_periods`, `silver_air_temperature`, `silver_humidity`, `silver_subzones`, `silver_cool_spaces`, `silver_census_subzone`, `silver_census_planning_area` | One row per reading / place, typed, de-duplicated, with **expectations** that drop bad rows and count them. |
-# MAGIC | **Gold** | `gold_subzone_station_weights`, `gold_subzone_profile`, `gold_subzone_conditions`, `gold_checkin_list`, `gold_score_weights`, `gold_rulebook` | Stations → subzones, distance to the nearest cool space, vulnerability score, and the ranked check-in list with reasons and actions. |
+# MAGIC | **Bronze** | Exactly what the APIs sent, so we can always re-process from the source | `bronze_wbgt`, `bronze_forecast_24h`, `bronze_psi`, `bronze_pm25`, `bronze_air_temperature`, `bronze_humidity` (plus the Census, map and cool-space bronze tables written by `03_load_static`) |
+# MAGIC | **Silver** | Clean, typed, de-duplicated: one row per reading or place. Bad rows are dropped here and counted | `silver_wbgt`, `silver_wbgt_stations`, `silver_wbgt_daily_peak`, `silver_psi`, `silver_pm25`, `silver_haze_regions`, `silver_forecast_24h`, `silver_forecast_periods`, `silver_air_temperature`, `silver_humidity`, `silver_subzones`, `silver_cool_spaces`, `silver_census_subzone`, `silver_census_planning_area` |
+# MAGIC | **Gold** | Business-ready tables the app, Genie and the model use | `gold_forecast_features`, `gold_subzone_station_weights`, `gold_subzone_profile`, `gold_subzone_conditions`, `gold_checkin_list`, `gold_wbgt_station_latest`, `gold_haze_latest`, `gold_daily_summary`, `gold_score_weights`, `gold_rulebook` |
 # MAGIC
-# MAGIC The Census bronze tables, subzone map and cool spaces come from `03_load_static` (regular tables, read here by full name).
+# MAGIC ### How the pieces fit together
+# MAGIC 1. `02_backfill` and `01_ingest_live` drop JSON files into the `raw` volume → **bronze**.
+# MAGIC 2. **Silver** cleans them. **`gold_forecast_features`** turns the clean data into one row per station per day for the model.
+# MAGIC 3. `05_forecast_model` trains the model; `06_score_forecast` writes tomorrow's forecast to `ml_wbgt_forecast`.
+# MAGIC 4. The next pipeline run blends that forecast into each subzone and produces **`gold_checkin_list`**: the ranked list coordinators use.
 # MAGIC
-# MAGIC **Heat input (for now):** the latest observed afternoon peak WBGT. The forecast model replaces it with tomorrow's predicted peak.
+# MAGIC If no forecast exists yet, the list falls back to the latest **observed** afternoon peak and says so in the `heat_basis` column.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Settings and helper functions
+# MAGIC
+# MAGIC All the numbers that shape the results live here, in one place, so they are easy to find, explain and change:
+# MAGIC
+# MAGIC - **Heat-stress bands**: NEA's own WBGT cut-offs (Low < 31 °C, Moderate 31–32.9 °C, High ≥ 33 °C). We measured these from the data on 11 Oct and they match NEA's labels on every reading.
+# MAGIC - **PSI bands**: NEA's haze bands (Good ≤ 50, Moderate ≤ 100, Unhealthy ≤ 200, Very unhealthy ≤ 300, Hazardous above).
+# MAGIC - **Afternoon window (12:00–17:59)**: heat stress peaks in the afternoon, and this is when seniors are most at risk outdoors. "Afternoon peak" is the value we forecast.
+# MAGIC - **Risk score weights**: how much heat, haze, vulnerability and distance to a cool space each count. These are published to the `gold_score_weights` table so the app can show them; nothing is hidden.
+# MAGIC
+# MAGIC The helper functions convert timestamps to Singapore time, assign bands, and measure distances on the earth's surface (`st_distancesphere`).
 
 # COMMAND ----------
 
@@ -21,6 +46,7 @@ from pyspark.sql import functions as F, Window as W
 
 CATALOG, SCHEMA = "workspace", "heatguard"
 RAW = f"/Volumes/{CATALOG}/{SCHEMA}/raw"
+ML_FORECAST_TABLE = f"{CATALOG}.{SCHEMA}.ml_wbgt_forecast"   # written by 06_score_forecast
 
 def static(name):
     """Tables written by 03_load_static (not managed by this pipeline)."""
@@ -32,16 +58,19 @@ WBGT_MODERATE, WBGT_HIGH = 31.0, 33.0
 PSI_BANDS = [(50, "Good"), (100, "Moderate"), (200, "Unhealthy"), (300, "Very unhealthy")]
 
 AFTERNOON_HOURS = (12, 17)       # 12:00–17:59 SGT: when heat stress peaks and outreach matters
+MIN_AFTERNOON_READINGS = 12      # of 24 possible 15-minute readings; fewer and the day's peak is unreliable
 NEAREST_STATIONS = 3             # stations blended per subzone (inverse-distance weighting)
 ACTIVE_STATION_DAYS = 7          # a station counts as active if it reported in the last 7 days of data
 MIN_SENIORS = 50                 # subzones with fewer residents aged 65+ are left out of the ranking
 FAR_FROM_COOL_SPACE_KM = 2.0     # at or beyond this distance, the access score is at its maximum
+FORECAST_CUTOFF_SGT = "18:30"    # the model only uses NEA forecasts issued by 6:30 pm the day before (when we publish)
+RAIN_PATTERN = "(?i)shower|rain|thunder|drizzle"
 
-# Risk score = 100 × weighted sum of four 0–1 components (shown on the dashboard via gold_score_weights)
+# Risk score = 100 × weighted sum of four 0–1 components (shown in the app via gold_score_weights)
 SCORE_WEIGHTS = {
     "heat":          (0.35, "Afternoon WBGT: 0 at 29 °C, 1 at 34 °C and above"),
     "haze":          (0.15, "24-hour PSI: 0 at 50 (Good) or below, 1 at 200 (Very unhealthy) and above"),
-    "vulnerability": (0.35, "Census vulnerability score of the subzone (see VULNERABILITY_WEIGHTS)"),
+    "vulnerability": (0.35, "Census vulnerability score of the subzone (see the vulnerability weights)"),
     "access":        (0.15, f"Distance to the nearest Community Club or library: 0 at the door, 1 at {FAR_FROM_COOL_SPACE_KM:g} km or more"),
 }
 # Vulnerability = weighted sum of percentile ranks among in-scope subzones
@@ -79,11 +108,28 @@ def clamp01(col):
 def distance_km(lon1, lat1, lon2, lat2):
     return F.expr(f"st_distancesphere(st_point({lon1}, {lat1}), st_point({lon2}, {lat2})) / 1000")
 
+def nearest_region(df, lon_col, lat_col):
+    """Name of the nearest NEA region (north/south/east/west/central label point) for each row."""
+    regions = spark.read.table("silver_haze_regions").select(
+        F.col("region").alias("_region"), F.col("latitude").alias("_r_lat"), F.col("longitude").alias("_r_lon"))
+    key = [c for c in df.columns]
+    return (df.crossJoin(regions)
+            .withColumn("_d", distance_km(lon_col, lat_col, "_r_lon", "_r_lat"))
+            .groupBy(*key).agg(F.min_by("_region", "_d").alias("region")))
+
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Bronze: raw files → streaming tables (Auto Loader)
-# MAGIC Explicit schemas keep history and live files (slightly different top-level fields) in one table. Numbers stay as text until silver.
+# MAGIC ## Bronze: raw files → streaming tables
+# MAGIC
+# MAGIC **What it does:** Auto Loader watches each folder in the `raw` volume and loads every new `.jsonl` file exactly once.
+# MAGIC Backfill files (`history_*.jsonl`) and live files (`live_*.jsonl`) land in the same table.
+# MAGIC
+# MAGIC **Why explicit schemas:** history and live files carry slightly different extra fields (`fetched_for_date` vs `fetched_at`), and some
+# MAGIC numbers arrive as text (e.g. WBGT `"NA"`). Declaring the schema up front keeps both kinds of file in one table and stops a single
+# MAGIC odd file from breaking the load. Numbers stay as text here; they are converted (and checked) in silver.
+# MAGIC
+# MAGIC Every row also records which file it came from (`_file`) and when it was loaded (`_ingested_at`), so any value can be traced back to its source file.
 
 # COMMAND ----------
 
@@ -131,7 +177,18 @@ bronze("humidity", "station_series", "NEA relative humidity: one row per timesta
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Silver: weather and haze
+# MAGIC ## Silver: WBGT readings (the main heat signal)
+# MAGIC
+# MAGIC **What it does:** each bronze row holds one 15-minute snapshot with ~30 stations inside it. We "explode" it into **one row per station per 15 minutes**,
+# MAGIC convert text to numbers, attach Singapore date and hour, and remove duplicates (the same reading can arrive from both the backfill and the live job).
+# MAGIC
+# MAGIC **Data-quality expectations** (results visible on the pipeline graph):
+# MAGIC | Rule | Action | Why |
+# MAGIC |---|---|---|
+# MAGIC | `has_station` | drop | A reading we can't place on the map is useless |
+# MAGIC | `numeric_reading` | drop | NEA sends `"NA"` when a sensor is down (~2,900 readings, 0.3%) |
+# MAGIC | `plausible_range` (20–40 °C) | drop | Singapore WBGT never realistically goes below 20 °C; 74 readings as low as 14.3 °C are sensor faults |
+# MAGIC | `matches_nea_band` | flag only | Checks that our band cut-offs agree with NEA's own label. They agree on every row, which confirms the cut-offs |
 
 # COMMAND ----------
 
@@ -159,6 +216,21 @@ def silver_wbgt():
     return (out.dropDuplicates(["station_id", "reading_ts"])
                .withColumn("heat_band", wbgt_band(F.col("wbgt_c"))))
 
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### WBGT stations and daily afternoon peaks
+# MAGIC
+# MAGIC **`silver_wbgt_stations`** — one row per station with its latest location and when it last reported. The network grew from 8 stations
+# MAGIC (Jan 2025) to 30 (Aug 2026), and stations occasionally go offline, so a station is **active** only if it reported in the last 7 days of data.
+# MAGIC Only active stations are used to estimate heat for subzones.
+# MAGIC
+# MAGIC **`silver_wbgt_daily_peak`** — one row per station per day with the **highest WBGT between 12:00 and 17:59**. This is the number the
+# MAGIC forecast model predicts for tomorrow, because it captures the worst heat seniors face on a given day. A day needs at least
+# MAGIC 12 of the 24 possible afternoon readings for its peak to be trusted; days with fewer are flagged by the `enough_afternoon_readings` expectation.
+
+# COMMAND ----------
+
 @dlt.table(comment="WBGT stations: latest known location, first/last reading, and whether the station is active (reported in the last 7 days of data).")
 def silver_wbgt_stations():
     latest = (spark.read.table("silver_wbgt")
@@ -176,7 +248,7 @@ def silver_wbgt_stations():
             .drop("newest"))
 
 @dlt.table(comment="Daily afternoon (12:00–17:59 SGT) peak WBGT per station: the value the forecast model predicts for tomorrow.")
-@dlt.expect("enough_afternoon_readings", "afternoon_readings >= 12")
+@dlt.expect("enough_afternoon_readings", f"afternoon_readings >= {MIN_AFTERNOON_READINGS}")
 def silver_wbgt_daily_peak():
     a, b = AFTERNOON_HOURS
     return (spark.read.table("silver_wbgt")
@@ -186,6 +258,20 @@ def silver_wbgt_daily_peak():
                  F.max("wbgt_c").alias("daily_max_wbgt_c"),
                  F.count("*").alias("readings"))
             .withColumn("afternoon_peak_band", wbgt_band(F.col("afternoon_peak_wbgt_c"))))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Silver: haze (PSI and PM2.5)
+# MAGIC
+# MAGIC **What it does:** NEA publishes haze for 5 regions (north, south, east, west, central) every hour. Each bronze row stores
+# MAGIC *measure → region → value*. We reshape it into **one row per region per hour** with one column per measure
+# MAGIC (24-hour PSI, 24-hour PM2.5, PM10, ozone, and so on) and attach NEA's PSI band.
+# MAGIC
+# MAGIC **Expectations:** PSI and PM2.5 must be present and inside the physically possible range (PSI 0–500), otherwise the row is dropped.
+# MAGIC
+# MAGIC **`silver_haze_regions`** keeps the 5 regions' label locations. We use them to assign every subzone and weather station to its nearest region,
+# MAGIC because haze is only published at that level — we deliberately don't pretend to finer detail.
 
 # COMMAND ----------
 
@@ -229,11 +315,27 @@ def silver_haze_regions():
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Silver: NEA 24-hour forecasts
+# MAGIC
+# MAGIC **What it does:** NEA issues its 24-hour forecast several times a day (most often around 5 am, 11 am, 5:30 pm and 11:30 pm).
+# MAGIC We keep two views of it:
+# MAGIC - **`silver_forecast_24h`** — one row per issued forecast with the island-wide numbers: temperature range, humidity range, wind and an overall outlook.
+# MAGIC - **`silver_forecast_periods`** — one row per issue × time period (about 6 hours each) × region, with the outlook text (e.g. "Thundery Showers").
+# MAGIC
+# MAGIC **Why we keep the issue time in Singapore time:** the model must only use forecasts that existed *before* we publish tomorrow's list
+# MAGIC (6:30 pm). Using a forecast issued later would be "peeking at the future" and make the model look better than it really is.
+
+# COMMAND ----------
+
 @dlt.table(comment="NEA 24-hour forecast: one row per issued forecast (temperature, humidity, wind and outlook for the whole island).")
 @dlt.expect_or_drop("has_valid_period", "valid_start_ts IS NOT NULL")
 def silver_forecast_24h():
     return (spark.read.table("bronze_forecast_24h")
-            .select(F.coalesce("timestamp", "updatedTimestamp").cast("timestamp").alias("issued_ts"),
+            .withColumn("_issued", F.coalesce("timestamp", "updatedTimestamp"))
+            .select(F.col("_issued").cast("timestamp").alias("issued_ts"),
+                    F.to_date(F.substring("_issued", 1, 10)).alias("issued_date_sgt"),
+                    F.substring("_issued", 12, 5).alias("issued_time_sgt"),
                     F.col("updatedTimestamp").cast("timestamp").alias("updated_ts"),
                     F.col("general.validPeriod.start").cast("timestamp").alias("valid_start_ts"),
                     F.col("general.validPeriod.end").cast("timestamp").alias("valid_end_ts"),
@@ -249,19 +351,34 @@ def silver_forecast_24h():
                     F.col("general.forecast.text").alias("forecast_text"))
             .dropDuplicates(["issued_ts", "valid_start_ts"]))
 
-@dlt.table(comment="NEA 24-hour forecast by period (about 6 hours) and region: outlook code and text.")
+@dlt.table(comment="NEA 24-hour forecast by period (about 6 hours) and region: outlook code and text, with the issue and period times in Singapore time.")
 def silver_forecast_periods():
     return (spark.read.table("bronze_forecast_24h")
-            .select(F.coalesce("timestamp", "updatedTimestamp").cast("timestamp").alias("issued_ts"),
+            .withColumn("_issued", F.coalesce("timestamp", "updatedTimestamp"))
+            .select(F.col("_issued").cast("timestamp").alias("issued_ts"),
+                    F.to_date(F.substring("_issued", 1, 10)).alias("issued_date_sgt"),
+                    F.substring("_issued", 12, 5).alias("issued_time_sgt"),
                     F.explode("periods").alias("p"))
-            .select("issued_ts",
+            .select("issued_ts", "issued_date_sgt", "issued_time_sgt",
                     F.col("p.timePeriod.start").cast("timestamp").alias("period_start_ts"),
+                    F.to_date(F.substring("p.timePeriod.start", 1, 10)).alias("period_date_sgt"),
+                    F.substring("p.timePeriod.start", 12, 2).cast("int").alias("period_start_hour_sgt"),
                     F.col("p.timePeriod.end").cast("timestamp").alias("period_end_ts"),
                     F.col("p.timePeriod.text").alias("period_text"),
                     F.explode("p.regions").alias("region", "o"))
-            .select("issued_ts", "period_start_ts", "period_end_ts", "period_text", "region",
+            .select("issued_ts", "issued_date_sgt", "issued_time_sgt", "period_start_ts", "period_date_sgt",
+                    "period_start_hour_sgt", "period_end_ts", "period_text", "region",
                     F.col("o.code").alias("forecast_code"), F.col("o.text").alias("forecast_text"))
             .dropDuplicates(["issued_ts", "period_start_ts", "region"]))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Silver: air temperature and humidity
+# MAGIC
+# MAGIC **What it does:** one row per station per reading, with the station's name and location attached. These come only from the live job
+# MAGIC (we decided on 11 Oct not to backfill them, to save quota), so they are used for context in the app rather than by the model.
+# MAGIC Readings outside physically possible ranges (15–45 °C, 0–100 %) are dropped.
 
 # COMMAND ----------
 
@@ -279,7 +396,7 @@ def station_series(table):
               .dropDuplicates(["station_id", "reading_ts"]))
     return values.join(stations, "station_id", "left")
 
-@dlt.table(comment="Air temperature (°C): one row per station per minute-level reading collected by the live job.")
+@dlt.table(comment="Air temperature (°C): one row per station per reading collected by the live job.")
 @dlt.expect_or_drop("plausible_temperature", "air_temp_c BETWEEN 15 AND 45")
 def silver_air_temperature():
     return station_series("bronze_air_temperature").withColumnRenamed("value", "air_temp_c")
@@ -293,6 +410,21 @@ def silver_humidity():
 
 # MAGIC %md
 # MAGIC ## Silver: places and people
+# MAGIC
+# MAGIC **`silver_subzones`** — the 332 URA subzones with their planning area, URA region and **centre point** (centroid of the boundary).
+# MAGIC Distances to stations and cool spaces are measured from this point. The pipeline *fails* if any subzone has no centre point,
+# MAGIC because every later step depends on it.
+# MAGIC
+# MAGIC **`silver_cool_spaces`** — the 125 Community Clubs and 27 public libraries in one table. Both are free, air-conditioned and open to seniors,
+# MAGIC unlike parks or hawker centres, which are outdoors and hot in the afternoon. Points outside Singapore's bounding box are dropped.
+# MAGIC
+# MAGIC **`silver_census_subzone`** — Census 2020 numbers per subzone: residents, residents aged 65+ and 75+, and residents in 1–2 room HDB flats
+# MAGIC (a common proxy for lower income and less likely to have air-conditioning). In the Census files `"-"` means zero.
+# MAGIC Subzones are matched to the Census by name; all 332 match.
+# MAGIC
+# MAGIC **`silver_census_planning_area`** — one-person households and households with a member who has difficulty with daily activities.
+# MAGIC The Census only publishes these for the **30 largest planning areas**, so we keep the national rate in a `NATIONAL` row and use it
+# MAGIC where an area's own rate is missing (and flag that in the output). We state this limit rather than overclaim.
 
 # COMMAND ----------
 
@@ -358,7 +490,102 @@ def silver_census_planning_area():
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Gold: subzone profile, conditions and the ranked check-in list
+# MAGIC ## Gold: model features (one row per station per day)
+# MAGIC
+# MAGIC **What it does:** builds the table the forecast model learns from. Each row is a station on day *d* and describes what we know
+# MAGIC at 6:30 pm that day; the **target** is the same station's afternoon peak on day *d + 1*.
+# MAGIC
+# MAGIC | Feature group | Columns | Why it should help |
+# MAGIC |---|---|---|
+# MAGIC | Recent heat at the station | `peak_d`, `peak_d1`, `peak_d2`, `peak_mean_7d`, `peak_max_7d`, `daily_max_d` | Weather is persistent: a hot day is usually followed by another |
+# MAGIC | Station's usual level | `station_mean_to_date` | Some sites (e.g. open stadiums) run hotter than others. Uses only days *before* d, so no peeking |
+# MAGIC | Island-wide heat | `network_mean_peak_d`, `network_max_peak_d` | Smooths out a single station's noise or missing day |
+# MAGIC | Season | `doy_sin`, `doy_cos`, `target_month` | Singapore's hottest months are Apr–Jun and Sep–Oct (the day of year is encoded as a circle so 31 Dec sits next to 1 Jan) |
+# MAGIC | NEA's forecast for tomorrow | `nea_temp_high_c`, `nea_temp_low_c`, `nea_rh_high_pct`, `nea_rh_low_pct`, `nea_wind_high_kmh`, `nea_rain_expected`, `nea_region_afternoon_rain` | NEA's own outlook, issued by 6:30 pm. Afternoon showers cut the peak |
+# MAGIC | Haze | `psi_24h_d` | Thick haze blocks some sunlight, which can lower WBGT |
+# MAGIC | Location | `latitude`, `longitude` | Coastal vs inland differences |
+# MAGIC
+# MAGIC Gaps in a station's record are handled correctly: "yesterday" means exactly the previous calendar day, not the previous row.
+# MAGIC Rows for the latest day have no target yet — those are the rows `06_score_forecast` predicts.
+
+# COMMAND ----------
+
+@dlt.table(comment="Forecast model features: one row per WBGT station per day (what is known by 6:30 pm SGT) with the target = the station's afternoon peak WBGT the next day.")
+@dlt.expect("has_recent_heat", "peak_d IS NOT NULL OR peak_mean_7d IS NOT NULL")
+def gold_forecast_features():
+    peaks = (spark.read.table("silver_wbgt_daily_peak")
+             .withColumn("peak", F.when(F.col("afternoon_readings") >= MIN_AFTERNOON_READINGS, F.col("afternoon_peak_wbgt_c")))
+             .withColumn("day_n", F.datediff(F.col("date_sgt"), F.lit("2025-01-01"))))
+    w = W.partitionBy("station_id").orderBy("day_n")
+    at = lambda k: F.max("peak").over(w.rangeBetween(k, k))
+    df = (peaks
+          .withColumn("peak_d", F.col("peak"))
+          .withColumn("peak_d1", at(-1))
+          .withColumn("peak_d2", at(-2))
+          .withColumn("peak_mean_7d", F.avg("peak").over(w.rangeBetween(-6, 0)))
+          .withColumn("peak_max_7d", F.max("peak").over(w.rangeBetween(-6, 0)))
+          .withColumn("station_mean_to_date", F.avg("peak").over(w.rangeBetween(W.unboundedPreceding, -1)))
+          .withColumn("network_mean_peak_d", F.avg("peak").over(W.partitionBy("date_sgt")))
+          .withColumn("network_max_peak_d", F.max("peak").over(W.partitionBy("date_sgt")))
+          .withColumn("target_peak_wbgt_c", at(1))
+          .withColumn("target_date", F.date_add("date_sgt", 1))
+          .withColumn("target_month", F.month("target_date"))
+          .withColumn("doy_sin", F.sin(2 * 3.141592653589793 * F.dayofyear("target_date") / 365.25))
+          .withColumn("doy_cos", F.cos(2 * 3.141592653589793 * F.dayofyear("target_date") / 365.25))
+          .withColumnRenamed("date_sgt", "feature_date")
+          .withColumnRenamed("daily_max_wbgt_c", "daily_max_d"))
+
+    stations = spark.read.table("silver_wbgt_stations").select("station_id", "station_name", "latitude", "longitude")
+    station_region = nearest_region(stations, "longitude", "latitude")
+
+    # NEA forecast for the target day: latest issue on the day before, by the cut-off, that covers the target day's afternoon
+    periods = (spark.read.table("silver_forecast_periods")
+               .where((F.col("period_start_hour_sgt") == 12)
+                      & (F.col("issued_date_sgt") == F.date_sub("period_date_sgt", 1))
+                      & (F.col("issued_time_sgt") <= FORECAST_CUTOFF_SGT)))
+    chosen = periods.groupBy(F.col("period_date_sgt").alias("target_date")).agg(F.max("issued_ts").alias("chosen_ts"))
+    region_fc = (periods.join(chosen, (periods.period_date_sgt == chosen.target_date) & (periods.issued_ts == chosen.chosen_ts))
+                 .select("target_date", "region", "chosen_ts",
+                         F.col("forecast_text").alias("nea_region_afternoon_text"),
+                         F.col("forecast_text").rlike(RAIN_PATTERN).cast("int").alias("nea_region_afternoon_rain")))
+    general = (spark.read.table("silver_forecast_24h")
+               .groupBy(F.col("issued_ts").alias("chosen_ts"))
+               .agg(F.first("temp_high_c").alias("nea_temp_high_c"), F.first("temp_low_c").alias("nea_temp_low_c"),
+                    F.first("rh_high_pct").alias("nea_rh_high_pct"), F.first("rh_low_pct").alias("nea_rh_low_pct"),
+                    F.first("wind_speed_high_kmh").alias("nea_wind_high_kmh"),
+                    F.first("forecast_text").alias("nea_forecast_text")))
+    nea = (region_fc.join(general, "chosen_ts", "left")
+           .withColumn("nea_rain_expected", F.col("nea_forecast_text").rlike(RAIN_PATTERN).cast("int"))
+           .withColumnRenamed("chosen_ts", "nea_issued_ts"))
+
+    # Haze in the station's region on day d (latest reading up to 6 pm)
+    psi = (spark.read.table("silver_psi").where(F.col("hour_sgt") <= 18)
+           .groupBy(F.col("date_sgt").alias("feature_date"), "region")
+           .agg(F.max_by("psi_twenty_four_hourly", "reading_ts").alias("psi_24h_d")))
+
+    return (df.join(station_region.select("station_id", "station_name", "latitude", "longitude", "region"), "station_id", "left")
+            .join(nea, ["target_date", "region"], "left")
+            .join(psi, ["feature_date", "region"], "left")
+            .select("station_id", "station_name", "region", "latitude", "longitude", "feature_date", "target_date",
+                    "peak_d", "peak_d1", "peak_d2", "peak_mean_7d", "peak_max_7d", "daily_max_d", "station_mean_to_date",
+                    "network_mean_peak_d", "network_max_peak_d", "target_month", "doy_sin", "doy_cos",
+                    "nea_issued_ts", "nea_temp_high_c", "nea_temp_low_c", "nea_rh_high_pct", "nea_rh_low_pct",
+                    "nea_wind_high_kmh", "nea_forecast_text", "nea_rain_expected",
+                    "nea_region_afternoon_text", "nea_region_afternoon_rain", "psi_24h_d",
+                    "afternoon_readings", "target_peak_wbgt_c"))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: from 30 stations to 332 subzones
+# MAGIC
+# MAGIC **What it does:** heat is measured at ~30 stations, but people live in 332 subzones. For each subzone we take its
+# MAGIC **3 nearest active stations** and blend their values, giving closer stations more say (weight ∝ 1 / distance², known as
+# MAGIC inverse-distance weighting). A station 1 km away counts 4× as much as one 2 km away.
+# MAGIC
+# MAGIC **Why 3 stations rather than 1:** one station can have a bad day (sensor fault, local shade). Blending smooths that out without
+# MAGIC pretending to more detail than 30 stations can give. We also keep the distance to the nearest station so the app can show how
+# MAGIC close the measurement really is (the furthest subzone is about 7 km from a station).
 
 # COMMAND ----------
 
@@ -375,6 +602,26 @@ def gold_subzone_station_weights():
     return (d.withColumn("weight", F.round(F.col("_inv") / F.sum("_inv").over(W.partitionBy("subzone_name")), 4))
              .select("subzone_name", "station_id", "station_name", "station_rank", "distance_km", "weight"))
 
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: subzone profile and vulnerability score
+# MAGIC
+# MAGIC **What it does:** one row per subzone that brings together who lives there and how far they are from help:
+# MAGIC - **People** (Census 2020): residents aged 65+, share aged 65+ and 75+, share in 1–2 room flats, and the planning area's
+# MAGIC   one-person-household and daily-activity-difficulty rates (national rate where not published, flagged in `pa_data_published`).
+# MAGIC - **Nearest cool space**: name, type and straight-line distance from the subzone centre, plus how many are within 1 km.
+# MAGIC - **Nearest WBGT station** and **haze region**.
+# MAGIC
+# MAGIC **Vulnerability score (0–1):** for each of the 5 indicators we compute the subzone's **percentile rank** among in-scope subzones
+# MAGIC (0 = lowest, 1 = highest), then take a weighted sum (weights in the settings cell). Percentile ranks put indicators measured in
+# MAGIC different units (people, percentages) on the same 0–1 scale and stop one extreme value from dominating.
+# MAGIC
+# MAGIC **In scope:** subzones with at least 50 residents aged 65+. Industrial areas, nature reserves and near-empty subzones would otherwise
+# MAGIC top the list on percentages alone (e.g. 3 seniors out of 5 residents = 60%).
+
+# COMMAND ----------
+
 @dlt.table(comment="One row per subzone: who lives there (Census 2020), nearest cool space, nearest WBGT station and haze region, and the vulnerability score (0–1) with its parts.")
 @dlt.expect("has_cool_space", "nearest_cool_space IS NOT NULL")
 def gold_subzone_profile():
@@ -389,6 +636,8 @@ def gold_subzone_profile():
                     .groupBy("subzone_name")
                     .agg(F.min_by("name", "d").alias("nearest_cool_space"),
                          F.min_by("space_type", "d").alias("nearest_cool_space_type"),
+                         F.min_by("street", "d").alias("nearest_cool_space_street"),
+                         F.min_by("postal_code", "d").alias("nearest_cool_space_postal"),
                          F.round(F.min("d"), 2).alias("cool_space_km"),
                          F.count(F.when(F.col("d") <= 1.0, True)).alias("cool_spaces_within_1km")))
 
@@ -396,11 +645,9 @@ def gold_subzone_profile():
                        .select("subzone_name", F.col("station_name").alias("nearest_wbgt_station"),
                                F.col("distance_km").alias("nearest_wbgt_station_km")))
 
-    regions = spark.read.table("silver_haze_regions")
-    haze_region = (sz.select("subzone_name", "centroid_latitude", "centroid_longitude")
-                   .crossJoin(regions.select("region", F.col("latitude").alias("r_lat"), F.col("longitude").alias("r_lon")))
-                   .withColumn("d", distance_km("centroid_longitude", "centroid_latitude", "r_lon", "r_lat"))
-                   .groupBy("subzone_name").agg(F.min_by("region", "d").alias("haze_region")))
+    haze_region = (nearest_region(sz.select("subzone_name", "centroid_latitude", "centroid_longitude"),
+                                  "centroid_longitude", "centroid_latitude")
+                   .select("subzone_name", F.col("region").alias("haze_region")))
 
     p = (sz.select("subzone_name", "subzone_code", "planning_area", "ura_region", "centroid_latitude", "centroid_longitude")
          .join(census, "subzone_name", "left")
@@ -425,7 +672,22 @@ def gold_subzone_profile():
     keep = ["subzone_name"] + [f"pr_{c}" for c in VULNERABILITY_WEIGHTS] + ["vulnerability_score"]
     return p.join(scoped.select(*keep), "subzone_name", "left")
 
-@dlt.table(comment="Latest conditions per subzone: heat (inverse-distance blend of the nearest WBGT stations) for the latest reading and the latest afternoon peak, plus haze for the subzone's NEA region.")
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: conditions per subzone (forecast, latest observation, haze)
+# MAGIC
+# MAGIC **What it does:** for every subzone, blends the station values with the weights above to give:
+# MAGIC - **Tomorrow's forecast** afternoon peak and the chance of Moderate-or-higher and High heat — from `ml_wbgt_forecast`, written by
+# MAGIC   `06_score_forecast`. Used only if it is a genuine forecast (its date is after the latest observed day).
+# MAGIC - **Latest observed** WBGT (the most recent 15-minute reading) and the **latest afternoon peak** (the fallback when no forecast exists).
+# MAGIC - **Latest haze** (24-hour PSI and PM2.5) for the subzone's NEA region. There is no official haze forecast, so we carry the latest value forward and label it as such.
+# MAGIC
+# MAGIC If a nearby station didn't report, the weights are re-scaled over the stations that did, so one missing station doesn't distort the value.
+
+# COMMAND ----------
+
+@dlt.table(comment="Conditions per subzone: tomorrow's forecast afternoon peak WBGT (when available), latest observed WBGT and afternoon peak (inverse-distance blend of the nearest stations), and latest haze for the subzone's NEA region.")
 def gold_subzone_conditions():
     weights = spark.read.table("gold_subzone_station_weights")
     wbgt = spark.read.table("silver_wbgt")
@@ -434,24 +696,45 @@ def gold_subzone_conditions():
     latest = (wbgt.join(latest_ts, wbgt.reading_ts == latest_ts.ts)
               .select("station_id", F.col("wbgt_c").alias("v"), F.col("reading_ts").alias("latest_reading_ts")))
 
-    peaks = spark.read.table("silver_wbgt_daily_peak").where("afternoon_readings >= 12")
+    peaks = spark.read.table("silver_wbgt_daily_peak").where(f"afternoon_readings >= {MIN_AFTERNOON_READINGS}")
     peak_day = peaks.agg(F.max("date_sgt").alias("d"))
     peak = (peaks.join(peak_day, peaks.date_sgt == peak_day.d)
             .select("station_id", F.col("afternoon_peak_wbgt_c").alias("v"), F.col("date_sgt").alias("peak_date_sgt")))
 
-    def blend(values, name, extra):
+    def blend(values, name, extra, more=()):
         # Re-normalise weights over stations that actually reported
         j = weights.join(values, "station_id")
-        return (j.groupBy("subzone_name")
-                .agg((F.sum(F.col("weight") * F.col("v")) / F.sum("weight")).alias(name),
-                     F.max(extra).alias(extra)))
+        aggs = [(F.sum(F.col("weight") * F.col("v")) / F.sum("weight")).alias(name), F.max(extra).alias(extra)]
+        aggs += [(F.sum(F.col("weight") * F.col(m)) / F.sum("weight")).alias(m) for m in more]
+        return j.groupBy("subzone_name").agg(*aggs)
 
     heat = (blend(latest, "wbgt_latest_c", "latest_reading_ts")
-            .join(blend(peak, "wbgt_afternoon_peak_c", "peak_date_sgt"), "subzone_name", "full")
-            .withColumn("wbgt_latest_c", F.round("wbgt_latest_c", 1))
-            .withColumn("wbgt_afternoon_peak_c", F.round("wbgt_afternoon_peak_c", 1))
-            .withColumn("heat_band_latest", wbgt_band(F.col("wbgt_latest_c")))
-            .withColumn("heat_band_afternoon_peak", wbgt_band(F.col("wbgt_afternoon_peak_c"))))
+            .join(blend(peak, "wbgt_afternoon_peak_c", "peak_date_sgt"), "subzone_name", "full"))
+
+    if spark.catalog.tableExists(ML_FORECAST_TABLE):
+        fc = spark.read.table(ML_FORECAST_TABLE)
+        newest = fc.agg(F.max("target_date").alias("t"))
+        fc = (fc.join(newest, fc.target_date == newest.t)
+              .join(peak_day, F.col("target_date") > F.col("d"))          # only a genuine forecast (after the latest observed day)
+              .select("station_id", F.col("predicted_peak_wbgt_c").alias("v"), "target_date",
+                      "prob_moderate_plus", "prob_high", "model_version"))
+        fc_sz = (blend(fc, "wbgt_forecast_c", "target_date", more=("prob_moderate_plus", "prob_high"))
+                 .crossJoin(fc.groupBy().agg(F.max("model_version").alias("forecast_model_version"))))
+        heat = heat.join(fc_sz.withColumnRenamed("target_date", "forecast_target_date"), "subzone_name", "left")
+    else:
+        heat = (heat.withColumn("wbgt_forecast_c", F.lit(None).cast("double"))
+                    .withColumn("forecast_target_date", F.lit(None).cast("date"))
+                    .withColumn("prob_moderate_plus", F.lit(None).cast("double"))
+                    .withColumn("prob_high", F.lit(None).cast("double"))
+                    .withColumn("forecast_model_version", F.lit(None).cast("string")))
+
+    for c in ["wbgt_latest_c", "wbgt_afternoon_peak_c", "wbgt_forecast_c"]:
+        heat = heat.withColumn(c, F.round(c, 1))
+    heat = (heat.withColumn("prob_moderate_plus", F.round("prob_moderate_plus", 3))
+                .withColumn("prob_high", F.round("prob_high", 3))
+                .withColumn("heat_band_latest", wbgt_band(F.col("wbgt_latest_c")))
+                .withColumn("heat_band_afternoon_peak", wbgt_band(F.col("wbgt_afternoon_peak_c")))
+                .withColumn("heat_band_forecast", wbgt_band(F.col("wbgt_forecast_c"))))
 
     psi = spark.read.table("silver_psi")
     psi_latest = (psi.join(psi.agg(F.max("reading_ts").alias("ts")), F.col("reading_ts") == F.col("ts"))
@@ -468,7 +751,20 @@ def gold_subzone_conditions():
 
 # COMMAND ----------
 
-@dlt.table(comment="Score weights used by gold_checkin_list and the vulnerability score (shown on the dashboard).")
+# MAGIC %md
+# MAGIC ## Gold: score weights and the action rulebook
+# MAGIC
+# MAGIC **`gold_score_weights`** publishes the weights from the settings cell as a table, so the app and Genie can show exactly how the risk
+# MAGIC score and vulnerability score are built.
+# MAGIC
+# MAGIC **`gold_rulebook`** holds the fixed actions for each heat band and haze band. **Actions come from this table, never from an AI model**:
+# MAGIC there is no data on which outreach actions reduce heat illness, so an AI choosing actions would be guessing. The language model in the
+# MAGIC app only rewrites the wording (e.g. into a friendly message or another language). The wording is a draft, to be checked against NEA's
+# MAGIC heat-stress and haze advisories and, ideally, by an Active Ageing Centre coordinator.
+
+# COMMAND ----------
+
+@dlt.table(comment="Score weights used by gold_checkin_list and the vulnerability score (shown in the app).")
 def gold_score_weights():
     rows = ([("risk_score", k, w, d) for k, (w, d) in SCORE_WEIGHTS.items()]
             + [("vulnerability_score", k, w, d) for k, (w, d) in VULNERABILITY_WEIGHTS.items()])
@@ -488,8 +784,26 @@ RULEBOOK = [
 def gold_rulebook():
     return spark.createDataFrame(RULEBOOK, "trigger STRING, level STRING, action STRING")
 
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: the ranked check-in list
+# MAGIC
+# MAGIC **What it does:** the table coordinators act on. For every in-scope subzone:
+# MAGIC
+# MAGIC 1. **Heat** — tomorrow's forecast afternoon peak if available, otherwise the latest observed peak. `heat_basis` says which.
+# MAGIC 2. **Four components, each scaled 0–1**: heat (29 → 34 °C), haze (PSI 50 → 200), vulnerability (the Census score), and access
+# MAGIC    (0 → 2 km to the nearest cool space).
+# MAGIC 3. **Risk score** = 100 × weighted sum (35% heat, 15% haze, 35% vulnerability, 15% access). Ranked highest first.
+# MAGIC 4. **Main driver** — the component contributing the most points, so a coordinator sees at a glance *why* an area is high.
+# MAGIC 5. **Reason** — one plain-English line with the actual numbers, and the **action** from the rulebook for the heat and haze bands.
+# MAGIC
+# MAGIC The `has_heat` expectation flags any subzone that ends up without a heat value (e.g. if all its nearby stations were offline).
+
+# COMMAND ----------
+
 @dlt.table(comment="Ranked check-in list: in-scope subzones (≥ 50 residents aged 65+) ranked by risk score (heat, haze, vulnerability, access to cool spaces), with the reason and the rulebook action. "
-                   "Heat basis for now: latest observed afternoon peak WBGT (to be replaced by tomorrow's forecast).")
+                   "Heat basis: tomorrow's model forecast when available, otherwise the latest observed afternoon peak (see heat_basis).")
 @dlt.expect("has_heat", "heat_component IS NOT NULL")
 def gold_checkin_list():
     p = spark.read.table("gold_subzone_profile").where("in_scope")
@@ -498,15 +812,19 @@ def gold_checkin_list():
     heat_rules = rules.where("trigger = 'heat'").select(F.col("level").alias("heat_band"), F.col("action").alias("heat_action"))
     haze_rules = rules.where("trigger = 'haze'").select(F.col("level").alias("psi_band"), F.col("action").alias("haze_action"))
 
+    is_fc = F.col("wbgt_forecast_c").isNotNull()
     df = (p.join(c, "subzone_name", "left")
-          .withColumn("heat_wbgt_c", F.col("wbgt_afternoon_peak_c"))
-          .withColumn("heat_band", F.col("heat_band_afternoon_peak"))
-          .withColumn("heat_basis", F.concat(F.lit("Observed afternoon peak on "), F.date_format("peak_date_sgt", "d MMM yyyy")))
+          .withColumn("heat_is_forecast", is_fc)
+          .withColumn("heat_wbgt_c", F.coalesce("wbgt_forecast_c", "wbgt_afternoon_peak_c"))
+          .withColumn("heat_band", wbgt_band(F.col("heat_wbgt_c")))
+          .withColumn("for_date", F.when(is_fc, F.col("forecast_target_date")).otherwise(F.col("peak_date_sgt")))
+          .withColumn("heat_basis", F.when(is_fc, F.concat(F.lit("Forecast for "), F.date_format("forecast_target_date", "EEE d MMM yyyy"),
+                                                              F.lit(" (model v"), F.col("forecast_model_version"), F.lit(")")))
+                                     .otherwise(F.concat(F.lit("Observed afternoon peak on "), F.date_format("peak_date_sgt", "EEE d MMM yyyy"))))
           .withColumn("heat_component", F.round(clamp01((F.col("heat_wbgt_c") - 29) / 5), 4))
-          .withColumn("haze_component", F.round(clamp01((F.col("psi_twenty_four_hourly") - 50) / 150), 4))
-          .withColumn("haze_component", F.coalesce("haze_component", F.lit(0.0)))
-          .withColumn("access_component", F.round(clamp01(F.col("cool_space_km") / FAR_FROM_COOL_SPACE_KM), 4)))
-    df = df.withColumn("vulnerability_component", F.col("vulnerability_score"))
+          .withColumn("haze_component", F.coalesce(F.round(clamp01((F.col("psi_twenty_four_hourly") - 50) / 150), 4), F.lit(0.0)))
+          .withColumn("access_component", F.round(clamp01(F.col("cool_space_km") / FAR_FROM_COOL_SPACE_KM), 4))
+          .withColumn("vulnerability_component", F.col("vulnerability_score")))
     contrib = {k: F.lit(w) * F.col(f"{k}_component") for k, (w, _) in SCORE_WEIGHTS.items()}
     df = df.withColumn("risk_score", F.round(100 * sum(contrib.values()), 1))
 
@@ -516,7 +834,8 @@ def gold_checkin_list():
 
     pct = lambda col: F.concat(F.round(F.col(col) * 100, 0).cast("int").cast("string"), F.lit("%"))
     df = df.withColumn("reason", F.concat_ws(" · ",
-        F.concat(F.lit("Heat: WBGT "), F.col("heat_wbgt_c").cast("string"), F.lit(" °C ("), F.col("heat_band"), F.lit(")")),
+        F.concat(F.when(is_fc, F.lit("Forecast heat: WBGT ")).otherwise(F.lit("Heat: WBGT ")),
+                 F.col("heat_wbgt_c").cast("string"), F.lit(" °C ("), F.col("heat_band"), F.lit(")")),
         F.concat(F.lit("Seniors: "), F.format_number("pop_65_plus", 0), F.lit(" aged 65+ ("), pct("pct_65_plus"), F.lit(" of residents)")),
         F.when(F.col("pct_1_2_room") >= 0.05, F.concat(pct("pct_1_2_room"), F.lit(" in 1–2 room HDB flats"))),
         F.concat(F.lit("Nearest cool space: "), F.col("nearest_cool_space"), F.lit(" ("), F.col("cool_space_km").cast("string"), F.lit(" km)")),
@@ -526,10 +845,76 @@ def gold_checkin_list():
             .withColumn("action", F.concat_ws(" ", "heat_action", "haze_action"))
             .withColumn("rank", F.row_number().over(W.orderBy(F.col("risk_score").desc_nulls_last(), F.col("pop_65_plus").desc()))))
     return df.select(
-        "rank", "subzone_name", "planning_area", "risk_score", "main_driver", "reason", "action",
-        "heat_wbgt_c", "heat_band", "heat_basis", "psi_twenty_four_hourly", "psi_band", "pm25_one_hourly",
-        "pop_65_plus", "pct_65_plus", "pop_75_plus", "pct_1_2_room", "pa_pct_one_person", "pa_pct_difficulty", "pa_data_published",
-        "vulnerability_score", "nearest_cool_space", "nearest_cool_space_type", "cool_space_km",
+        "rank", "subzone_name", "planning_area", "ura_region", "risk_score", "main_driver", "reason", "action",
+        "heat_wbgt_c", "heat_band", "heat_is_forecast", "heat_basis", "for_date", "prob_moderate_plus", "prob_high",
+        "wbgt_latest_c", "latest_reading_ts", "wbgt_afternoon_peak_c", "peak_date_sgt",
+        "psi_twenty_four_hourly", "psi_band", "pm25_one_hourly", "psi_reading_ts",
+        "pop_total", "pop_65_plus", "pct_65_plus", "pop_75_plus", "pct_75_plus", "pct_1_2_room",
+        "pa_pct_one_person", "pa_pct_difficulty", "pa_data_published",
+        "vulnerability_score", "nearest_cool_space", "nearest_cool_space_type", "nearest_cool_space_street",
+        "nearest_cool_space_postal", "cool_space_km", "cool_spaces_within_1km",
         "nearest_wbgt_station", "nearest_wbgt_station_km", "haze_region",
         "heat_component", "haze_component", "vulnerability_component", "access_component",
         "centroid_latitude", "centroid_longitude")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: summaries for the app and Genie
+# MAGIC
+# MAGIC Small, ready-to-read tables so the app loads quickly and Genie answers questions without scanning a million rows:
+# MAGIC - **`gold_wbgt_station_latest`** — each active station's most recent reading and today's peak so far (the app's "Now" view).
+# MAGIC - **`gold_haze_latest`** — the latest PSI and PM2.5 for each of the 5 regions.
+# MAGIC - **`gold_daily_summary`** — one row per day: hottest station peak, how many stations reached Moderate / High, and the worst PSI.
+# MAGIC   Used for trend charts and questions like "how many High heat days were there in September?".
+
+# COMMAND ----------
+
+@dlt.table(comment="Latest WBGT reading for each active station, with today's peak so far and band (the app's 'Now' view).")
+def gold_wbgt_station_latest():
+    wbgt = spark.read.table("silver_wbgt")
+    st = spark.read.table("silver_wbgt_stations").where("is_active").select("station_id")
+    latest = (wbgt.join(st, "station_id")
+              .groupBy("station_id")
+              .agg(F.max_by("station_name", "reading_ts").alias("station_name"),
+                   F.max_by("town_center", "reading_ts").alias("town_center"),
+                   F.max_by("latitude", "reading_ts").alias("latitude"),
+                   F.max_by("longitude", "reading_ts").alias("longitude"),
+                   F.max("reading_ts").alias("latest_reading_ts"),
+                   F.max_by("time_sgt", "reading_ts").alias("latest_time_sgt"),
+                   F.max_by("date_sgt", "reading_ts").alias("latest_date_sgt"),
+                   F.max_by("wbgt_c", "reading_ts").alias("wbgt_c")))
+    today = (wbgt.join(latest.select("station_id", F.col("latest_date_sgt").alias("date_sgt")), ["station_id", "date_sgt"])
+             .groupBy("station_id").agg(F.max("wbgt_c").alias("peak_so_far_today_c")))
+    return (latest.join(today, "station_id", "left")
+            .withColumn("heat_band", wbgt_band(F.col("wbgt_c")))
+            .withColumn("peak_so_far_band", wbgt_band(F.col("peak_so_far_today_c"))))
+
+@dlt.table(comment="Latest haze reading for each of NEA's 5 regions: 24-hour PSI and band, 24-hour PM2.5 and 1-hour PM2.5.")
+def gold_haze_latest():
+    psi = spark.read.table("silver_psi")
+    pm = spark.read.table("silver_pm25")
+    last_psi = psi.groupBy("region").agg(F.max("reading_ts").alias("reading_ts"))
+    last_pm = pm.groupBy("region").agg(F.max("reading_ts").alias("reading_ts"))
+    p = psi.join(last_psi, ["region", "reading_ts"]).select("region", "reading_ts", "date_sgt", "time_sgt",
+                                                             "psi_twenty_four_hourly", "pm25_twenty_four_hourly", "psi_band")
+    m = pm.join(last_pm, ["region", "reading_ts"]).select("region", "pm25_one_hourly")
+    regions = spark.read.table("silver_haze_regions")
+    return p.join(m, "region", "left").join(regions, "region", "left")
+
+@dlt.table(comment="One row per day (SGT): island-wide afternoon heat (hottest and average station peak, stations at Moderate/High) and haze (worst and average 24-hour PSI).")
+def gold_daily_summary():
+    peaks = (spark.read.table("silver_wbgt_daily_peak").where(f"afternoon_readings >= {MIN_AFTERNOON_READINGS}")
+             .groupBy("date_sgt")
+             .agg(F.count("*").alias("stations_reporting"),
+                  F.round(F.max("afternoon_peak_wbgt_c"), 1).alias("hottest_peak_wbgt_c"),
+                  F.round(F.avg("afternoon_peak_wbgt_c"), 2).alias("avg_peak_wbgt_c"),
+                  F.count(F.when(F.col("afternoon_peak_wbgt_c") >= WBGT_MODERATE, True)).alias("stations_moderate_or_high"),
+                  F.count(F.when(F.col("afternoon_peak_wbgt_c") >= WBGT_HIGH, True)).alias("stations_high")))
+    haze = (spark.read.table("silver_psi").groupBy("date_sgt")
+            .agg(F.max("psi_twenty_four_hourly").alias("worst_psi_24h"),
+                 F.round(F.avg("psi_twenty_four_hourly"), 1).alias("avg_psi_24h")))
+    return (peaks.join(haze, "date_sgt", "full")
+            .withColumn("hottest_band", wbgt_band(F.col("hottest_peak_wbgt_c")))
+            .withColumn("worst_psi_band", psi_band(F.col("worst_psi_24h")))
+            .withColumn("month", F.date_format("date_sgt", "yyyy-MM")))
