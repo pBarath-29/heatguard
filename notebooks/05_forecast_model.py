@@ -66,7 +66,6 @@ import matplotlib.pyplot as plt
 import mlflow
 from mlflow.models import infer_signature
 from sklearn.ensemble import HistGradientBoostingRegressor, HistGradientBoostingClassifier
-from sklearn.inspection import permutation_importance
 
 CATALOG, SCHEMA = "workspace", "heatguard"
 FEATURE_TABLE = f"{CATALOG}.{SCHEMA}.gold_forecast_features"
@@ -554,13 +553,17 @@ display(pd.DataFrame(calib).T.round(4))
 
 # COMMAND ----------
 
-class _Wrap:   # lets permutation_importance call the forecaster on a feature frame (the 7-day baseline is added back unchanged)
-    def fit(self, X, y): return self
-    def predict(self, X): return reg_dev.predict(X.assign(**{BASELINE: test.loc[X.index, BASELINE]}))
-pi = permutation_importance(_Wrap(), test[FEATURES], test[TARGET], scoring="neg_mean_absolute_error", n_repeats=5, random_state=42)
-importance = (pd.DataFrame({"column": FEATURES, "feature": [FEATURE_LABELS[f] for f in FEATURES],
-                            "mae_increase_c": pi.importances_mean, "std": pi.importances_std})
-              .sort_values("mae_increase_c", ascending=False))
+rng = np.random.default_rng(42)
+base_mae = np.mean(np.abs(test[TARGET] - reg_dev.predict(test)))
+imp_rows = []
+for f in FEATURES:
+    increases = []
+    for _ in range(5):                                   # shuffle each feature 5 times and average
+        shuffled = test.copy()
+        shuffled[f] = rng.permutation(shuffled[f].values)
+        increases.append(np.mean(np.abs(test[TARGET] - reg_dev.predict(shuffled))) - base_mae)
+    imp_rows.append({"column": f, "feature": FEATURE_LABELS[f], "mae_increase_c": float(np.mean(increases)), "std": float(np.std(increases))})
+importance = pd.DataFrame(imp_rows).sort_values("mae_increase_c", ascending=False)
 fig, ax = plt.subplots(figsize=(8, 6))
 top = importance.head(12).iloc[::-1]
 ax.barh(top.feature, top.mae_increase_c, xerr=top["std"], color="#6b8fb5")
