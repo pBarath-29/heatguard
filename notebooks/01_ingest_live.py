@@ -6,12 +6,17 @@
 # MAGIC %md
 # MAGIC # 01 · Live ingestion (runs every 15 minutes as a job)
 # MAGIC
-# MAGIC Fetches the latest readings from the data.gov.sg real-time APIs and lands them in the `raw` volume as JSON Lines,
-# MAGIC one new file per source per run. Auto Loader in the pipeline picks up new files incrementally.
+# MAGIC **What this notebook does:** fetches the **latest** readings from NEA's real-time APIs on data.gov.sg and saves each response as a new
+# MAGIC file in the `raw` volume. It is run by the job **`heatguard-live-ingest`** every 15 minutes (NEA updates WBGT every 15 minutes).
+# MAGIC The pipeline's Auto Loader then picks up each new file exactly once.
 # MAGIC
-# MAGIC | Folder | API | What one line is |
+# MAGIC **Why it exists alongside the daily backfill:** the daily job (`02_backfill` in refresh mode) is enough to forecast tomorrow. This live job
+# MAGIC keeps the app's **"Now"** view current during the day and shows judges a real streaming source. It can be paused to save Free Edition quota
+# MAGIC (decision of 11 Oct) and unpaused for the demo.
+# MAGIC
+# MAGIC | Folder | API | What one line in the file is |
 # MAGIC |---|---|---|
-# MAGIC | `raw/wbgt/` | Wet Bulb Globe Temperature (heat stress) | one 15-min record with all station readings (same layout as the backfill) |
+# MAGIC | `raw/wbgt/` | Wet Bulb Globe Temperature (heat stress) | one 15-minute record with all station readings (same layout as the backfill) |
 # MAGIC | `raw/forecast_24h/` | 24-hour forecast | one forecast record (same layout as the backfill) |
 # MAGIC | `raw/four_day_outlook/` | 4-day outlook | one outlook record |
 # MAGIC | `raw/air_temperature/` | Air temperature | one timestamp with all station values, plus the station list |
@@ -19,7 +24,20 @@
 # MAGIC | `raw/psi/` | Pollutant Standards Index (haze), hourly, 5 regions | one hourly record with all PSI measures, plus the region list |
 # MAGIC | `raw/pm25/` | PM2.5 (haze), hourly, 5 regions | one hourly record, plus the region list |
 # MAGIC
-# MAGIC Duplicates (the same reading fetched by two runs) are removed later in the pipeline, so overlapping runs are harmless.
+# MAGIC Overlapping runs are harmless: the same reading fetched twice is removed later in the pipeline (silver de-duplicates by station and time).
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Sources and how each response becomes lines in a file
+# MAGIC
+# MAGIC Each NEA API returns its data in a slightly different shape, so each source has a small function that turns the response into a list of
+# MAGIC records (one per line of the JSON Lines file):
+# MAGIC - **`records`** — WBGT and forecasts already come as a list of records.
+# MAGIC - **`station_readings`** — temperature and humidity return a station list plus readings; we copy the station list onto every reading so each line is self-contained.
+# MAGIC - **`region_items`** — PSI and PM2.5 return the 5 regions' locations plus hourly items; we copy the region list onto every item.
+# MAGIC
+# MAGIC The API key is read from the Databricks secret, never typed here.
 
 # COMMAND ----------
 
@@ -55,6 +73,22 @@ SOURCES = {
     "psi":               (f"{BASE}/psi", region_items),
     "pm25":              (f"{BASE}/pm25", region_items),
 }
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 2. Fetch every source and save one new file each
+# MAGIC
+# MAGIC **Error handling, in order:**
+# MAGIC - Network errors and rate limits (HTTP 429 / code 24): wait a little longer each time and retry, up to 5 times.
+# MAGIC - "No data right now" (code 17): not an error — nothing is saved for that source this run.
+# MAGIC - Any other API error: recorded as a failure for that source; the other sources still run.
+# MAGIC
+# MAGIC Each file is named with the fetch time (e.g. `live_20261014T103000Z.jsonl`) so files never overwrite each other, and every line records
+# MAGIC `source = "live"` and when it was fetched.
+# MAGIC
+# MAGIC **When the job shows as failed:** only if **WBGT** — the main heat signal — could not be fetched. A missing haze or humidity reading is
+# MAGIC logged but doesn't fail the run, so one flaky API doesn't stop heat data flowing.
 
 # COMMAND ----------
 

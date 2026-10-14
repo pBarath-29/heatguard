@@ -2,20 +2,31 @@
 # MAGIC %md
 # MAGIC # 03 · Load the fixed datasets (bronze)
 # MAGIC
-# MAGIC Downloads the datasets that don't change day to day and saves each as a **bronze** table in `workspace.heatguard`:
+# MAGIC **What this notebook does:** downloads the datasets that don't change day to day — who lives where (Census 2020), the subzone map, and the
+# MAGIC cool spaces seniors can go to — and saves each as a **bronze** table in `workspace.heatguard`.
 # MAGIC
-# MAGIC | Bronze table | data.gov.sg dataset | Level |
+# MAGIC | Bronze table | data.gov.sg dataset | Level of detail |
 # MAGIC |---|---|---|
 # MAGIC | `bronze_census_age` | Census 2020: population by planning area/subzone, age group and sex | subzone |
 # MAGIC | `bronze_census_dwelling` | Census 2020: population by planning area/subzone and type of dwelling | subzone |
-# MAGIC | `bronze_census_household_size` | Census 2020: resident households by planning area and household size | planning area (30 largest) |
-# MAGIC | `bronze_census_daily_activity` | Census 2020: households with a member who has difficulty with basic activities | planning area (30 largest) |
+# MAGIC | `bronze_census_household_size` | Census 2020: resident households by planning area and household size | planning area (30 largest only) |
+# MAGIC | `bronze_census_daily_activity` | Census 2020: households with a member who has difficulty with basic activities | planning area (30 largest only) |
 # MAGIC | `bronze_subzones` | URA Master Plan 2019 subzone boundaries | 332 subzones |
-# MAGIC | `bronze_community_clubs` | People's Association Community Clubs | points |
-# MAGIC | `bronze_libraries` | NLB public libraries | points |
+# MAGIC | `bronze_community_clubs` | People's Association Community Clubs | 125 points |
+# MAGIC | `bronze_libraries` | NLB public libraries | 27 points |
 # MAGIC
-# MAGIC Bronze = kept as close to the source as possible (values stay as text). Cleaning happens in the pipeline.
-# MAGIC Safe to re-run: each run replaces the tables.
+# MAGIC **Bronze** means "as close to the source as possible": Census values stay as text (e.g. `"-"` for zero) and are cleaned in the pipeline's
+# MAGIC silver layer, so the original is always available to check against. Safe to re-run: each run replaces these tables.
+# MAGIC
+# MAGIC **Why these datasets:** Census age and dwelling type are the only open data describing *where vulnerable seniors live* at subzone level.
+# MAGIC Community Clubs and libraries are free and air-conditioned, unlike parks and hawker centres, which are outdoors and hot in the afternoon.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Settings
+# MAGIC
+# MAGIC Each dataset is identified by its data.gov.sg dataset ID. Downloaded files go to `raw/static/` in the volume, so the exact files used are kept.
 
 # COMMAND ----------
 
@@ -42,7 +53,10 @@ DATASETS = {
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 1. Download the files into the `raw` volume
+# MAGIC ## 2. Download the files into the `raw` volume
+# MAGIC
+# MAGIC data.gov.sg serves dataset files in two steps: the API's `poll-download` call returns a temporary link, and the file itself is downloaded
+# MAGIC from that link (Amazon S3). The file extension (`.csv` or `.geojson`) is taken from the link. Rate limits are retried with a growing wait.
 
 # COMMAND ----------
 
@@ -77,7 +91,14 @@ for name, (dataset_id, _) in DATASETS.items():
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 2. Census tables (CSV → bronze, values kept as text)
+# MAGIC ## 3. Census tables (CSV → bronze, values kept as text)
+# MAGIC
+# MAGIC Each Census CSV is saved as-is, with every value as text (`inferSchema = False`), so nothing is silently converted or lost.
+# MAGIC Two tracking columns are added to every bronze table: `_source_dataset_id` (which data.gov.sg dataset it came from) and `_loaded_at`
+# MAGIC (when). A table comment records the source in Unity Catalog, so anyone browsing the catalog can see where the data came from.
+# MAGIC
+# MAGIC Note how the Census files are laid out: the first column (`Number`) holds the area name — `"Total"` for Singapore, `"<Planning area> - Total"`
+# MAGIC for planning areas, and the subzone name for subzones. The pipeline matches subzone rows to the URA map by name (all 332 match).
 
 # COMMAND ----------
 
@@ -100,10 +121,12 @@ for name in ["census_age", "census_dwelling", "census_household_size", "census_d
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Map layers (GeoJSON → bronze)
+# MAGIC ## 4. Map layers (GeoJSON → bronze)
 # MAGIC
-# MAGIC Subzone shapes are stored as GeoJSON text (the pipeline turns them into geometries with `st_geomfromgeojson`).
-# MAGIC Community Club and library files hide their details inside an HTML table in `Description`; we unpack it into columns.
+# MAGIC - **Subzones:** each boundary is kept as GeoJSON text alongside its subzone, planning area and URA region names. The pipeline turns it into a
+# MAGIC   geometry with `st_geomfromgeojson` to find each subzone's centre point.
+# MAGIC - **Community Clubs and libraries:** the useful details (name, postal code, street) are hidden inside an HTML table in the `Description` field —
+# MAGIC   a leftover from the KML format. `html_attributes` unpacks that table into proper columns; the full set of attributes is also kept as JSON.
 
 # COMMAND ----------
 
@@ -145,7 +168,10 @@ for name in ["community_clubs", "libraries"]:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 4. Quick look
+# MAGIC ## 5. Quick check
+# MAGIC
+# MAGIC Counts per map layer and how many rows have a name. Expected: 332 subzones, 125 Community Clubs and 27 libraries, all named.
+# MAGIC Any row without a name would be dropped by the pipeline's `has_name` expectation (and counted there).
 
 # COMMAND ----------
 

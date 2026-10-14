@@ -393,9 +393,13 @@ print("Best settings on validation:", best_params)
 # MAGIC Their settings are chosen by the **Brier score** on validation (the average squared gap between the predicted chance and what happened;
 # MAGIC 0 is perfect, lower is better).
 # MAGIC
-# MAGIC **The High-heat alert:** a station is flagged when its chance of High is at or above a threshold. We choose the threshold on validation by
-# MAGIC maximising the **F2 score**, which counts catching High days (recall) twice as much as avoiding false alarms (precision) — because
-# MAGIC for a coordinator, an unnecessary phone call costs little, while a missed High day can mean a senior suffering heat illness alone.
+# MAGIC **The High-heat alert:** a station is flagged when its chance of High is at or above a threshold. The threshold balances two costs:
+# MAGIC - a **missed High day** can mean a senior suffering heat illness alone, so we want to catch as many as possible (high recall);
+# MAGIC - but if most alerts are false alarms, coordinators learn to ignore them ("alert fatigue").
+# MAGIC
+# MAGIC **Rule:** on the validation period, pick the **lowest threshold at which at least 40% of alerts were real High days** — i.e. catch as many
+# MAGIC High days as possible while keeping alerts trustworthy. (An earlier version simply maximised the F2 score; it picked a 5% threshold that
+# MAGIC flagged a quarter of all station-days and was right only 1 time in 6 on the test months — too noisy to act on.)
 
 # COMMAND ----------
 
@@ -426,9 +430,11 @@ for th in np.round(np.arange(0.05, 0.61, 0.05), 2):
     thr_rows.append({"threshold": th, "recall": rec, "precision": prec, "alerts": int(f.sum()),
                      "F2": (5 * prec * rec) / (4 * prec + rec) if (prec + rec) else 0.0})
 thresholds = pd.DataFrame(thr_rows)
-ALERT_THRESHOLD = float(thresholds.sort_values("F2", ascending=False).iloc[0]["threshold"])
+MIN_ALERT_PRECISION = 0.40
+ok = thresholds[thresholds.precision >= MIN_ALERT_PRECISION]
+ALERT_THRESHOLD = float(ok.threshold.min() if len(ok) else thresholds.sort_values("F2", ascending=False).iloc[0]["threshold"])
 display(thresholds.round(3))
-print(f"High-heat alert threshold (chosen on validation by F2): {ALERT_THRESHOLD:.2f}")
+print(f"High-heat alert threshold: {ALERT_THRESHOLD:.2f} (lowest threshold with validation precision >= {MIN_ALERT_PRECISION:.0%})")
 
 # COMMAND ----------
 
