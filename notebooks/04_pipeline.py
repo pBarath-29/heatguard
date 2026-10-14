@@ -498,11 +498,13 @@ def silver_census_planning_area():
 # MAGIC | Feature group | Columns | Why it should help |
 # MAGIC |---|---|---|
 # MAGIC | Recent heat at the station | `peak_d`, `peak_d1`, `peak_d2`, `peak_mean_7d`, `peak_max_7d`, `daily_max_d` | Weather is persistent: a hot day is usually followed by another |
-# MAGIC | Station's usual level | `station_mean_to_date` | Some sites (e.g. open stadiums) run hotter than others. Uses only days *before* d, so no peeking |
-# MAGIC | Island-wide heat | `network_mean_peak_d`, `network_max_peak_d` | Smooths out a single station's noise or missing day |
+# MAGIC | Station's usual level | `station_mean_to_date`, `station_offset` | Some sites (e.g. open stadiums) run hotter than others. Uses only days *before* d, so no peeking. The offset is how much hotter or cooler than the network average the station usually is |
+# MAGIC | Island-wide heat | `network_mean_peak_d`, `network_max_peak_d`, `network_mean_7d` | Smooths out a single station's noise or missing day |
+# MAGIC | Today vs normal | `anom_d` | Today's peak minus the 7-day average: is today unusually hot or cool? |
+# MAGIC | Baseline | `baseline_7d_c` | The 7-day average (falling back to today, then the island average). The model predicts the *change* from this baseline |
 # MAGIC | Season | `doy_sin`, `doy_cos`, `target_month` | Singapore's hottest months are Apr–Jun and Sep–Oct (the day of year is encoded as a circle so 31 Dec sits next to 1 Jan) |
 # MAGIC | NEA's forecast for tomorrow | `nea_temp_high_c`, `nea_temp_low_c`, `nea_rh_high_pct`, `nea_rh_low_pct`, `nea_wind_high_kmh`, `nea_rain_expected`, `nea_region_afternoon_rain` | NEA's own outlook, issued by 6:30 pm. Afternoon showers cut the peak |
-# MAGIC | Haze | `psi_24h_d` | Thick haze blocks some sunlight, which can lower WBGT |
+# MAGIC | Haze | `psi_24h_d` | Haze episodes in Singapore come with dry, hot spells, so haze levels carry information about the weather pattern |
 # MAGIC | Location | `latitude`, `longitude` | Coastal vs inland differences |
 # MAGIC
 # MAGIC Gaps in a station's record are handled correctly: "yesterday" means exactly the previous calendar day, not the previous row.
@@ -527,6 +529,10 @@ def gold_forecast_features():
           .withColumn("station_mean_to_date", F.avg("peak").over(w.rangeBetween(W.unboundedPreceding, -1)))
           .withColumn("network_mean_peak_d", F.avg("peak").over(W.partitionBy("date_sgt")))
           .withColumn("network_max_peak_d", F.max("peak").over(W.partitionBy("date_sgt")))
+          .withColumn("network_mean_7d", F.avg("peak_mean_7d").over(W.partitionBy("date_sgt")))
+          .withColumn("anom_d", F.col("peak_d") - F.col("peak_mean_7d"))
+          .withColumn("station_offset", F.col("station_mean_to_date") - F.avg("station_mean_to_date").over(W.partitionBy("date_sgt")))
+          .withColumn("baseline_7d_c", F.coalesce("peak_mean_7d", "peak_d", "network_mean_peak_d"))
           .withColumn("target_peak_wbgt_c", at(1))
           .withColumn("target_date", F.date_add("date_sgt", 1))
           .withColumn("target_month", F.month("target_date"))
@@ -568,7 +574,8 @@ def gold_forecast_features():
             .join(psi, ["feature_date", "region"], "left")
             .select("station_id", "station_name", "region", "latitude", "longitude", "feature_date", "target_date",
                     "peak_d", "peak_d1", "peak_d2", "peak_mean_7d", "peak_max_7d", "daily_max_d", "station_mean_to_date",
-                    "network_mean_peak_d", "network_max_peak_d", "target_month", "doy_sin", "doy_cos",
+                    "network_mean_peak_d", "network_max_peak_d", "network_mean_7d", "anom_d", "station_offset",
+                    "baseline_7d_c", "target_month", "doy_sin", "doy_cos",
                     "nea_issued_ts", "nea_temp_high_c", "nea_temp_low_c", "nea_rh_high_pct", "nea_rh_low_pct",
                     "nea_wind_high_kmh", "nea_forecast_text", "nea_rain_expected",
                     "nea_region_afternoon_text", "nea_region_afternoon_rain", "psi_24h_d",
@@ -679,7 +686,8 @@ def gold_subzone_profile():
 # MAGIC
 # MAGIC **What it does:** for every subzone, blends the station values with the weights above to give:
 # MAGIC - **Tomorrow's forecast** afternoon peak and the chance of Moderate-or-higher and High heat — from `ml_wbgt_forecast`, written by
-# MAGIC   `06_score_forecast`. Used only if it is a genuine forecast (its date is after the latest observed day).
+# MAGIC   `06_score_forecast`. Used only if it is a genuine forecast (its date is after the latest observed day). A subzone is on
+# MAGIC   **High-heat alert** when its blended chance of High reaches the model's alert threshold.
 # MAGIC - **Latest observed** WBGT (the most recent 15-minute reading) and the **latest afternoon peak** (the fallback when no forecast exists).
 # MAGIC - **Latest haze** (24-hour PSI and PM2.5) for the subzone's NEA region. There is no official haze forecast, so we carry the latest value forward and label it as such.
 # MAGIC
@@ -717,9 +725,11 @@ def gold_subzone_conditions():
     fc = (fc.join(newest, fc.target_date == newest.t)
           .join(peak_day, F.col("target_date") > F.col("d"))          # only a genuine forecast (after the latest observed day)
           .select("station_id", F.col("predicted_peak_wbgt_c").alias("v"), "target_date",
-                  "prob_moderate_plus", "prob_high", "model_version"))
+                  "prob_moderate_plus", "prob_high", "high_alert_threshold", "model_version"))
     fc_sz = (blend(fc, "wbgt_forecast_c", "target_date", more=("prob_moderate_plus", "prob_high"))
-             .crossJoin(fc.groupBy().agg(F.max("model_version").alias("forecast_model_version"))))
+             .crossJoin(fc.groupBy().agg(F.max("model_version").alias("forecast_model_version"),
+                                         F.max("high_alert_threshold").alias("high_alert_threshold")))
+             .withColumn("high_alert", F.col("prob_high") >= F.col("high_alert_threshold")))
     heat = heat.join(fc_sz.withColumnRenamed("target_date", "forecast_target_date"), "subzone_name", "left")
 
     for c in ["wbgt_latest_c", "wbgt_afternoon_peak_c", "wbgt_forecast_c"]:
@@ -791,6 +801,9 @@ def gold_rulebook():
 # MAGIC 3. **Risk score** = 100 × weighted sum (35% heat, 15% haze, 35% vulnerability, 15% access). Ranked highest first.
 # MAGIC 4. **Main driver** — the component contributing the most points, so a coordinator sees at a glance *why* an area is high.
 # MAGIC 5. **Reason** — one plain-English line with the actual numbers, and the **action** from the rulebook for the heat and haze bands.
+# MAGIC    When a subzone is on **High-heat alert** (the model gives a meaningful chance of High even if the typical forecast is lower), the
+# MAGIC    reason starts with "High heat possible" and the **High** heat action is used: preparing for a High day that turns out Moderate costs
+# MAGIC    a few phone calls; being unprepared for a real High day can cost a senior's health.
 # MAGIC
 # MAGIC The `has_heat` expectation flags any subzone that ends up without a heat value (e.g. if all its nearby stations were offline).
 
@@ -803,7 +816,7 @@ def gold_checkin_list():
     p = spark.read.table("gold_subzone_profile").where("in_scope")
     c = spark.read.table("gold_subzone_conditions").drop("haze_region")
     rules = spark.read.table("gold_rulebook")
-    heat_rules = rules.where("trigger = 'heat'").select(F.col("level").alias("heat_band"), F.col("action").alias("heat_action"))
+    heat_rules = rules.where("trigger = 'heat'").select(F.col("level").alias("action_band"), F.col("action").alias("heat_action"))
     haze_rules = rules.where("trigger = 'haze'").select(F.col("level").alias("psi_band"), F.col("action").alias("haze_action"))
 
     is_fc = F.col("wbgt_forecast_c").isNotNull()
@@ -811,6 +824,8 @@ def gold_checkin_list():
           .withColumn("heat_is_forecast", is_fc)
           .withColumn("heat_wbgt_c", F.coalesce("wbgt_forecast_c", "wbgt_afternoon_peak_c"))
           .withColumn("heat_band", wbgt_band(F.col("heat_wbgt_c")))
+          .withColumn("high_alert", F.coalesce(is_fc & F.col("high_alert"), F.lit(False)))
+          .withColumn("action_band", F.when(F.col("high_alert"), F.lit("High")).otherwise(F.col("heat_band")))
           .withColumn("for_date", F.when(is_fc, F.col("forecast_target_date")).otherwise(F.col("peak_date_sgt")))
           .withColumn("heat_basis", F.when(is_fc, F.concat(F.lit("Forecast for "), F.date_format("forecast_target_date", "EEE d MMM yyyy"),
                                                               F.lit(" (model v"), F.col("forecast_model_version"), F.lit(")")))
@@ -828,6 +843,7 @@ def gold_checkin_list():
 
     pct = lambda col: F.concat(F.round(F.col(col) * 100, 0).cast("int").cast("string"), F.lit("%"))
     df = df.withColumn("reason", F.concat_ws(" · ",
+        F.when(F.col("high_alert"), F.concat(F.lit("High heat possible ("), F.round(F.col("prob_high") * 100, 0).cast("int").cast("string"), F.lit("% chance)"))),
         F.concat(F.when(is_fc, F.lit("Forecast heat: WBGT ")).otherwise(F.lit("Heat: WBGT ")),
                  F.col("heat_wbgt_c").cast("string"), F.lit(" °C ("), F.col("heat_band"), F.lit(")")),
         F.concat(F.lit("Seniors: "), F.format_number("pop_65_plus", 0), F.lit(" aged 65+ ("), pct("pct_65_plus"), F.lit(" of residents)")),
@@ -835,12 +851,12 @@ def gold_checkin_list():
         F.concat(F.lit("Nearest cool space: "), F.col("nearest_cool_space"), F.lit(" ("), F.col("cool_space_km").cast("string"), F.lit(" km)")),
         F.concat(F.lit("Haze: PSI "), F.col("psi_twenty_four_hourly").cast("int").cast("string"), F.lit(" ("), F.col("psi_band"), F.lit(")"))))
 
-    df = (df.join(heat_rules, "heat_band", "left").join(haze_rules, "psi_band", "left")
+    df = (df.join(heat_rules, "action_band", "left").join(haze_rules, "psi_band", "left")
             .withColumn("action", F.concat_ws(" ", "heat_action", "haze_action"))
             .withColumn("rank", F.row_number().over(W.orderBy(F.col("risk_score").desc_nulls_last(), F.col("pop_65_plus").desc()))))
     return df.select(
         "rank", "subzone_name", "planning_area", "ura_region", "risk_score", "main_driver", "reason", "action",
-        "heat_wbgt_c", "heat_band", "heat_is_forecast", "heat_basis", "for_date", "prob_moderate_plus", "prob_high",
+        "heat_wbgt_c", "heat_band", "high_alert", "action_band", "heat_is_forecast", "heat_basis", "for_date", "prob_moderate_plus", "prob_high",
         "wbgt_latest_c", "latest_reading_ts", "wbgt_afternoon_peak_c", "peak_date_sgt",
         "psi_twenty_four_hourly", "psi_band", "pm25_one_hourly", "psi_reading_ts",
         "pop_total", "pop_65_plus", "pct_65_plus", "pop_75_plus", "pct_75_plus", "pct_1_2_room",

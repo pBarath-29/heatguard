@@ -46,7 +46,8 @@ spark.sql(f"""CREATE TABLE IF NOT EXISTS {FORECAST_TABLE} (
   station_id STRING COMMENT 'NEA WBGT station id', station_name STRING, feature_date DATE COMMENT 'Day the forecast was made (SGT)',
   target_date DATE COMMENT 'Day being forecast (SGT)', predicted_peak_wbgt_c DOUBLE COMMENT 'Forecast afternoon (12:00-17:59) peak WBGT, deg C',
   predicted_band STRING COMMENT 'NEA band of the forecast peak', prob_moderate_plus DOUBLE COMMENT 'Chance the peak reaches 31 deg C or more',
-  prob_high DOUBLE COMMENT 'Chance the peak reaches 33 deg C or more', model_name STRING, model_version STRING, scored_at TIMESTAMP)
+  prob_high DOUBLE COMMENT 'Chance the peak reaches 33 deg C or more', high_alert BOOLEAN COMMENT 'Chance of High at or above the alert threshold',
+  high_alert_threshold DOUBLE COMMENT 'Alert threshold chosen in 05_forecast_model', model_name STRING, model_version STRING, scored_at TIMESTAMP)
 COMMENT 'Tomorrow''s afternoon peak WBGT forecast per station, written daily by 06_score_forecast (one row per station per target date).'""")
 
 # COMMAND ----------
@@ -78,7 +79,7 @@ print(f"Loaded {MODEL_NAME} version {champion.version} ({len(features)} features
 today_sgt = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).date()
 latest_day = spark.sql(f"SELECT max(feature_date) FROM {FEATURE_TABLE} WHERE peak_d IS NOT NULL").first()[0]
 inputs = (spark.table(FEATURE_TABLE)
-          .where(f"feature_date = DATE'{latest_day}' AND (peak_d IS NOT NULL OR peak_mean_7d IS NOT NULL)")
+          .where(f"feature_date = DATE'{latest_day}' AND baseline_7d_c IS NOT NULL")
           .toPandas())
 for c in features:
     inputs[c] = pd.to_numeric(inputs[c], errors="coerce")
@@ -96,7 +97,7 @@ print(f"NEA forecast for tomorrow available for {1 - missing_nea:.0%} of station
 # MAGIC %md
 # MAGIC ## 4. Forecast and save
 # MAGIC
-# MAGIC The model returns the forecast peak, its band and the two probabilities. We save one row per station for tomorrow,
+# MAGIC The model returns the forecast peak, its band, the chance of Moderate+ and High heat, and the High-heat alert. We save one row per station for tomorrow,
 # MAGIC replacing any earlier forecast for the same day (so re-running is safe).
 
 # COMMAND ----------
@@ -114,6 +115,7 @@ sdf = spark.createDataFrame(out).selectExpr(
     "station_id", "station_name", "CAST(feature_date AS DATE) feature_date", "CAST(target_date AS DATE) target_date",
     "CAST(predicted_peak_wbgt_c AS DOUBLE) predicted_peak_wbgt_c", "predicted_band",
     "CAST(prob_moderate_plus AS DOUBLE) prob_moderate_plus", "CAST(prob_high AS DOUBLE) prob_high",
+    "CAST(high_alert AS BOOLEAN) high_alert", "CAST(high_alert_threshold AS DOUBLE) high_alert_threshold",
     "model_name", "model_version", "CAST(scored_at AS TIMESTAMP) scored_at")
 sdf.write.mode("overwrite").option("replaceWhere", f"target_date = DATE'{target}'").saveAsTable(FORECAST_TABLE)
 print(f"Saved {len(out)} station forecasts for {target}.")
@@ -123,7 +125,8 @@ print(f"Saved {len(out)} station forecasts for {target}.")
 # MAGIC %md
 # MAGIC ## 5. Tomorrow at a glance
 # MAGIC
-# MAGIC A quick island-wide summary: the hottest stations, how many are expected to reach Moderate or High, and the highest chance of High heat.
+# MAGIC A quick island-wide summary: the hottest stations, how many are expected to reach Moderate or High, the highest chance of High heat,
+# MAGIC and how many stations are on **High-heat alert** (chance of High at or above the threshold chosen in `05_forecast_model`).
 
 # COMMAND ----------
 
@@ -131,8 +134,8 @@ summary = out.sort_values("predicted_peak_wbgt_c", ascending=False)
 print(f"Forecast for {pd.Timestamp(target):%A %d %b %Y}: "
       f"{(summary.predicted_band == 'High').sum()} stations High, {(summary.predicted_band == 'Moderate').sum()} Moderate, "
       f"{(summary.predicted_band == 'Low').sum()} Low. Hottest: {summary.station_name.iloc[0]} at {summary.predicted_peak_wbgt_c.iloc[0]:.1f} °C. "
-      f"Highest chance of High heat: {summary.prob_high.max():.0%}.")
-display(summary[["station_name", "predicted_peak_wbgt_c", "predicted_band", "prob_moderate_plus", "prob_high"]])
+      f"Highest chance of High heat: {summary.prob_high.max():.0%}; {int(summary.high_alert.sum())} station(s) on High-heat alert.")
+display(summary[["station_name", "predicted_peak_wbgt_c", "predicted_band", "prob_moderate_plus", "prob_high", "high_alert"]])
 
 # COMMAND ----------
 
@@ -148,7 +151,7 @@ spark.sql(f"""
 CREATE OR REPLACE VIEW {CATALOG}.{SCHEMA}.ml_forecast_track_record
 COMMENT 'Every saved station forecast next to the afternoon peak WBGT actually observed (null until that day has been observed).'
 AS SELECT f.station_id, f.station_name, f.feature_date, f.target_date, f.predicted_peak_wbgt_c, f.predicted_band,
-          f.prob_moderate_plus, f.prob_high, f.model_version,
+          f.prob_moderate_plus, f.prob_high, f.high_alert, f.model_version,
           p.afternoon_peak_wbgt_c AS actual_peak_wbgt_c, p.afternoon_peak_band AS actual_band,
           round(abs(f.predicted_peak_wbgt_c - p.afternoon_peak_wbgt_c), 2) AS abs_error_c
    FROM {FORECAST_TABLE} f
