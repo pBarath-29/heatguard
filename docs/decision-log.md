@@ -23,6 +23,8 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 ## What we learned
 
+- 14 Oct 2026: **Haze backfill complete.** PSI and PM2.5: 636 of 636 days each (16 Jan 2025 → 13 Oct 2026), no gaps; 24 hourly records per day for 5 regions (north, south, east, west, central). Run took ~32 min on serverless.
+
 - 11 Oct 2026: **Backfill complete.** WBGT: 633 days (16 Jan 2025 → 10 Oct 2026), ~1.01M station readings. 24-hour forecast: 632 days (missing 2025-07-20).
   - **NEA heat-stress bands, measured from the data:** Low < 31.0 °C, Moderate 31.0–32.9 °C, High ≥ 33.0 °C. We use these exact cut-offs.
   - **High is rare:** 2,056 High readings (0.2%), 40,175 Moderate (4%). Peaks Apr–Jun and Sep–Oct; highest 36.6 °C (Sep 2026). The model must handle this imbalance.
