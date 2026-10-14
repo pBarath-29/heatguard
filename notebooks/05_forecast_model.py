@@ -564,7 +564,7 @@ backtest = backtest.assign(actual_band=band(backtest.actual_peak_wbgt_c.values),
 for t, c in [("ml_model_evaluation", "Forecast model vs baselines on the held-out test period (latest training run of 05_forecast_model)."),
              ("ml_backtest_predictions", "Test-period forecasts of tomorrow's afternoon peak WBGT next to the actual value and the best baseline."),
              ("ml_feature_importance", "Permutation importance of each forecast feature on the test period (increase in average error when shuffled).")]:
-    spark.sql(f"COMMENT ON TABLE {CATALOG}.{SCHEMA}.{t} IS '{c}'")
+    spark.sql(f"COMMENT ON TABLE {CATALOG}.{SCHEMA}.{t} IS '{c.replace(chr(39), chr(39) * 2)}'")
 print("Saved ml_model_evaluation, ml_backtest_predictions, ml_feature_importance")
 
 # COMMAND ----------
