@@ -6,6 +6,11 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 | Date | Decision | Why | Alternatives considered |
 |---|---|---|---|
+| 14 Oct 2026 | Pipeline `heatguard-pipeline` (Lakeflow, serverless, triggered; source `notebooks/04_pipeline.py`): bronze via Auto Loader → silver with expectations → gold ranked list | One declarative pipeline gives lineage, data-quality metrics and incremental loads with little code | Plain notebooks writing tables |
+| 14 Oct 2026 | Heat at subzone level = inverse-distance blend (power 2) of the **3 nearest active WBGT stations** to the subzone centroid; nearest-station distance kept as a confidence signal (max 6.8 km) | 30 stations vs 332 subzones; blending smooths single-station noise without inventing detail | Nearest station only; kriging |
+| 14 Oct 2026 | Haze at subzone level = PSI of the **nearest NEA haze region** label (5 regions) | Haze is only published for 5 regions; we don't pretend to finer detail | URA regions (don't match NEA's 5) |
+| 14 Oct 2026 | Risk score = 100 × (0.35 heat + 0.15 haze + 0.35 vulnerability + 0.15 access). Heat 0→1 over WBGT 29–34 °C; haze 0→1 over PSI 50–200; access 0→1 over 0–2 km to the nearest CC/library. Vulnerability = weighted percentile ranks (65+ share 0.30, 65+ count 0.20, 1–2 room share 0.20, one-person households 0.15, daily-activity difficulty 0.15). Weights published in `gold_score_weights` | Transparent and adjustable; every row shows its main driver and a plain-English reason | Multiplicative score; ML-learned weights (no outcome data) |
+| 14 Oct 2026 | Ranking covers subzones with **≥ 50 residents aged 65+** (216 of 332); planning-area Census rates fall back to the national rate where not published (19 of 216, flagged `pa_data_published = false`) | Avoids tiny or empty subzones topping the list on shares alone | Rank all 332 |
 | 14 Oct 2026 | Added haze data: NEA **PSI** and **PM2.5** (hourly, 5 regions) to the live job and the backfill (`raw/psi/`, `raw/pm25/`) | Mentor (Loy, 13 Oct) suggested haze; haze plus heat adds to the strain on seniors, and both are cheap to collect (1 call per day of history). Reverses the 23 Sep decision to drop PM2.5. Haze will be a **factor in the risk score** (not just a warning flag); weighting still to design, at region level (5 regions) | Leave haze out (23 Sep decision); haze as a warning flag only |
 | 11 Oct 2026 | **Paused** the live ingestion schedule for now (job kept, unpause when needed) | Save Free Edition quota while building the pipeline; history is already loaded | Keep running every 15 min |
 | 11 Oct 2026 | Live ingestion job `heatguard-live-ingest` (job 1098458350267132) runs `01_ingest_live` every 15 min (Asia/Singapore), serverless, 1 retry, no overlapping runs | WBGT updates every 15 min; keeps "Now" tab and forecast inputs fresh; shows judges a real live stream | 30- or 60-min schedule if Free Edition quota becomes a problem |
@@ -22,6 +27,9 @@ Shared record of what we learned, what we decided and why, and open questions (r
 | 23 Sep 2026 | Chose problem B1 HeatGuard | Strongest data fit, policy timing (Year of Climate Adaptation, super-aged 2026), originality; see `reports/DAISI problem statement selection.md` | A1 SilverWatch (runner-up) |
 
 ## What we learned
+
+- 14 Oct 2026: **First pipeline run.** Expectations dropped 2,883 `NA` and 74 implausible (< 20 °C) WBGT readings out of 1,018,725; NEA's band matched our cut-offs on every row; 36 station-days had fewer than 12 afternoon readings (flagged). All 332 subzones matched the Census by name; 152 cool spaces (125 CCs + 27 libraries). First ranked list: 216 subzones, top = Telok Blangah Rise (Bukit Merah).
+- 14 Oct 2026: **There is a haze episode right now:** 24-hour PSI above 100 ("Unhealthy") somewhere in Singapore every day since 5 Oct, peaking at 192 on 9 Oct. 1,532 region-hours of Unhealthy PSI in the history; never Very unhealthy.
 
 - 14 Oct 2026: **Haze backfill complete.** PSI and PM2.5: 636 of 636 days each (16 Jan 2025 → 13 Oct 2026), no gaps; 24 hourly records per day for 5 regions (north, south, east, west, central). Run took ~32 min on serverless.
 
