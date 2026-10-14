@@ -200,7 +200,9 @@ def region_hourly(table, measures):
             .select("timestamp", "measure", F.explode("by_region").alias("region", "value"))
             .withColumn("value", F.expr("try_cast(value AS DOUBLE)")))
     t = local_parts("timestamp")
-    return (long.groupBy("timestamp", "region").pivot("measure", measures).agg(F.first("value"))
+    # Conditional aggregation instead of pivot (pivot is not supported in declarative pipelines)
+    return (long.groupBy("timestamp", "region")
+            .agg(*[F.max(F.when(F.col("measure") == m, F.col("value"))).alias(m) for m in measures])
             .select("region", *[v.alias(k) for k, v in t.items()], *measures))
 
 @dlt.table(comment="Haze: hourly Pollutant Standards Index and pollutant measures for NEA's 5 regions. PSI bands: Good ≤ 50, Moderate ≤ 100, Unhealthy ≤ 200, Very unhealthy ≤ 300, Hazardous > 300.")
