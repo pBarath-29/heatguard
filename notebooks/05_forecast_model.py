@@ -329,7 +329,7 @@ for values in itertools.product(*GRID.values()):
     m = make_model(**params).fit(train[FEATURES], train[TARGET])
     tuning.append({**params, **{f"val {k}": v for k, v in scores(valid[TARGET], m.predict(valid[FEATURES])).items() if k in ("MAE (°C)", "High recall", "Band accuracy")}})
 tuning = pd.DataFrame(tuning).sort_values("val MAE (°C)")
-best_params = {k: (float(v) if isinstance(v, float) else int(v)) for k, v in tuning.iloc[0][list(GRID)].items()}
+best_params = {k: type(GRID[k][0])(tuning.iloc[0][k]) for k in GRID}   # back to each setting's own type (int or float)
 display(tuning.round(4))
 print("Best settings on validation:", best_params)
 
