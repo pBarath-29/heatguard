@@ -1,0 +1,1 @@
+"""HeatGuard app pages."""
