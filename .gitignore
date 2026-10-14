@@ -21,3 +21,6 @@ __pycache__/
 
 # Organiser correspondence (marked confidential)
 docs/stage2/selection-email.txt
+
+# Web app frontend
+node_modules/
