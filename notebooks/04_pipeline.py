@@ -15,13 +15,14 @@
 # MAGIC |---|---|---|
 # MAGIC | **Bronze** | Exactly what the APIs sent, so we can always re-process from the source | `bronze_wbgt`, `bronze_forecast_24h`, `bronze_psi`, `bronze_pm25`, `bronze_air_temperature`, `bronze_humidity` (plus the Census, map and cool-space bronze tables written by `03_load_static`) |
 # MAGIC | **Silver** | Clean, typed, de-duplicated: one row per reading or place. Bad rows are dropped here and counted | `silver_wbgt`, `silver_wbgt_stations`, `silver_wbgt_daily_peak`, `silver_psi`, `silver_pm25`, `silver_haze_regions`, `silver_forecast_24h`, `silver_forecast_periods`, `silver_air_temperature`, `silver_humidity`, `silver_subzones`, `silver_cool_spaces`, `silver_census_subzone`, `silver_census_planning_area` |
-# MAGIC | **Gold** | Business-ready tables the app, Genie and the model use | `gold_forecast_features`, `gold_subzone_station_weights`, `gold_subzone_profile`, `gold_subzone_conditions`, `gold_checkin_list`, `gold_wbgt_station_latest`, `gold_haze_latest`, `gold_daily_summary`, `gold_score_weights`, `gold_rulebook` |
+# MAGIC | **Gold** | Business-ready tables the app, Genie and the model use | `gold_forecast_features`, `gold_subzone_station_weights`, `gold_subzone_profile`, `gold_subzone_conditions`, `gold_checkin_list`, `gold_day_outlook`, `gold_replay_list`, `gold_replay_summary`, `gold_wbgt_station_latest`, `gold_haze_latest`, `gold_daily_summary`, `gold_score_weights`, `gold_rulebook` |
 # MAGIC
 # MAGIC ### How the pieces fit together
 # MAGIC 1. `02_backfill` and `01_ingest_live` drop JSON files into the `raw` volume → **bronze**.
 # MAGIC 2. **Silver** cleans them. **`gold_forecast_features`** turns the clean data into one row per station per day for the model.
 # MAGIC 3. `05_forecast_model` trains the model; `06_score_forecast` writes tomorrow's forecast to `ml_wbgt_forecast`.
-# MAGIC 4. The next pipeline run blends that forecast into each subzone and produces **`gold_checkin_list`**: the ranked list coordinators use.
+# MAGIC 4. The next pipeline run blends that forecast into each subzone and produces **`gold_checkin_list`** (areas in priority tiers: Act / Check in / Routine)
+# MAGIC    and **`gold_day_outlook`** (one headline for the day). **`gold_replay_*`** run the same logic on past test days to show what HeatGuard would have said.
 # MAGIC
 # MAGIC If no forecast exists yet, the list falls back to the latest **observed** afternoon peak and says so in the `heat_basis` column.
 
@@ -66,13 +67,24 @@ FAR_FROM_COOL_SPACE_KM = 2.0     # at or beyond this distance, the access score 
 FORECAST_CUTOFF_SGT = "18:30"    # the model only uses NEA forecasts issued by 6:30 pm the day before (when we publish)
 RAIN_PATTERN = "(?i)shower|rain|thunder|drizzle"
 
-# Risk score = 100 × weighted sum of four 0–1 components (shown in the app via gold_score_weights)
-SCORE_WEIGHTS = {
-    "heat":          (0.35, "Afternoon WBGT: 0 at 29 °C, 1 at 34 °C and above"),
-    "haze":          (0.15, "24-hour PSI: 0 at 50 (Good) or below, 1 at 200 (Very unhealthy) and above"),
-    "vulnerability": (0.35, "Census vulnerability score of the subzone (see the vulnerability weights)"),
-    "access":        (0.15, f"Distance to the nearest Community Club or library: 0 at the door, 1 at {FAR_FROM_COOL_SPACE_KM:g} km or more"),
-}
+# Risk = 100 × hazard × exposure (both 0–1).
+#   hazard   = how dangerous the day is: 0.5 × P(peak ≥ 31 °C) + 0.5 × min(1, P(peak ≥ 33 °C) / 0.5), plus up to 0.3 for haze
+#   exposure = who would be affected: 0.7 × vulnerability score + 0.3 × distance to the nearest cool space
+# Multiplying means a cool day scores low everywhere, and the same area moves up the list on a hot day.
+P_HIGH_FULL = 0.5                 # a 50% chance of High heat counts as the full High-heat part of the hazard
+HAZE_IN_HAZARD = 0.3              # haze adds up to 0.3 to the hazard (nothing at PSI 50, full at PSI 200)
+OBSERVED_HAZARD = {"High": 0.9, "Moderate": 0.45, "Low": 0.15}   # heat hazard used only when no forecast exists
+EXPOSURE_WEIGHTS = {"vulnerability": 0.7, "access": 0.3}
+CHECKIN_EXPOSURE_PCTL = 0.75      # 'Check in' = Moderate heat in the top quarter of areas by exposure
+TIERS = {"Act": 1, "Check in": 2, "Routine": 3}
+
+SCORE_WEIGHTS = [   # published to gold_score_weights for the app and Genie
+    ("hazard", "p_moderate_plus", 0.5, "Chance tomorrow's afternoon peak reaches Moderate heat stress (WBGT 31 °C or more), from the forecast model"),
+    ("hazard", "p_high", 0.5, "Chance it reaches High heat stress (WBGT 33 °C or more); a 50% chance or more counts in full"),
+    ("hazard", "haze", HAZE_IN_HAZARD, "Haze adds to the danger: nothing at PSI 50 (Good), the full 0.3 at PSI 200 (Very unhealthy)"),
+    ("exposure", "vulnerability", EXPOSURE_WEIGHTS["vulnerability"], "Census vulnerability score of the area (seniors, small flats, living alone, daily-activity difficulty)"),
+    ("exposure", "access", EXPOSURE_WEIGHTS["access"], f"Distance to the nearest Community Club or library: nothing at the door, full at {FAR_FROM_COOL_SPACE_KM:g} km or more"),
+]
 # Vulnerability = weighted sum of percentile ranks among in-scope subzones
 VULNERABILITY_WEIGHTS = {
     "pct_65_plus":       (0.30, "Share of residents aged 65+ (subzone)"),
@@ -758,8 +770,8 @@ def gold_subzone_conditions():
 # MAGIC %md
 # MAGIC ## Gold: score weights and the action rulebook
 # MAGIC
-# MAGIC **`gold_score_weights`** publishes the weights from the settings cell as a table, so the app and Genie can show exactly how the risk
-# MAGIC score and vulnerability score are built.
+# MAGIC **`gold_score_weights`** publishes the weights from the settings cell as a table (`score` = hazard, exposure or vulnerability_score),
+# MAGIC so the app and Genie can show exactly how the risk score is built.
 # MAGIC
 # MAGIC **`gold_rulebook`** holds the fixed actions for each heat band and haze band. **Actions come from this table, never from an AI model**:
 # MAGIC there is no data on which outreach actions reduce heat illness, so an AI choosing actions would be guessing. The language model in the
@@ -770,8 +782,7 @@ def gold_subzone_conditions():
 
 @dlt.table(comment="Score weights used by gold_checkin_list and the vulnerability score (shown in the app).")
 def gold_score_weights():
-    rows = ([("risk_score", k, w, d) for k, (w, d) in SCORE_WEIGHTS.items()]
-            + [("vulnerability_score", k, w, d) for k, (w, d) in VULNERABILITY_WEIGHTS.items()])
+    rows = SCORE_WEIGHTS + [("vulnerability_score", k, w, d) for k, (w, d) in VULNERABILITY_WEIGHTS.items()]
     return spark.createDataFrame(rows, "score STRING, component STRING, weight DOUBLE, description STRING")
 
 RULEBOOK = [
@@ -791,32 +802,90 @@ def gold_rulebook():
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Gold: the ranked check-in list
+# MAGIC ## Gold: scoring and priority tiers (shared by the live list and the replay)
 # MAGIC
-# MAGIC **What it does:** the table coordinators act on. For every in-scope subzone:
+# MAGIC **Why the score multiplies:** an earlier version *added* heat, haze, vulnerability and distance. Because heat varies little between areas
+# MAGIC and vulnerability never changes, that list looked almost the same every day — "many vulnerable seniors" topped it whatever the weather.
+# MAGIC The risk score is now **hazard × exposure**:
 # MAGIC
-# MAGIC 1. **Heat** — tomorrow's forecast afternoon peak if available, otherwise the latest observed peak. `heat_basis` says which.
-# MAGIC 2. **Four components, each scaled 0–1**: heat (29 → 34 °C), haze (PSI 50 → 200), vulnerability (the Census score), and access
-# MAGIC    (0 → 2 km to the nearest cool space).
-# MAGIC 3. **Risk score** = 100 × weighted sum (35% heat, 15% haze, 35% vulnerability, 15% access). Ranked highest first.
-# MAGIC 4. **Main driver** — the component contributing the most points, so a coordinator sees at a glance *why* an area is high.
-# MAGIC 5. **Reason** — one plain-English line with the actual numbers, and the **action** from the rulebook for the heat and haze bands.
-# MAGIC    When a subzone is on **High-heat alert** (the model gives a meaningful chance of High even if the typical forecast is lower), the
-# MAGIC    reason starts with "High heat possible" and the **High** heat action is used: preparing for a High day that turns out Moderate costs
-# MAGIC    a few phone calls; being unprepared for a real High day can cost a senior's health.
+# MAGIC | Part | What it measures | How |
+# MAGIC |---|---|---|
+# MAGIC | **Hazard** (0–1) | How dangerous the day is | 0.5 × chance of Moderate-or-higher heat + 0.5 × chance of High heat (full at 50%), from the forecast model, plus up to 0.3 for haze. With no forecast: a fixed value per observed band |
+# MAGIC | **Exposure** (0–1) | Who would be affected | 0.7 × Census vulnerability score + 0.3 × distance to the nearest cool space |
 # MAGIC
-# MAGIC The `has_heat` expectation flags any subzone that ends up without a heat value (e.g. if all its nearby stations were offline).
+# MAGIC On a cool day every area scores low; on a hot day the most exposed areas rise to the top. The forecast now drives the list.
+# MAGIC
+# MAGIC **Priority tiers** — what a coordinator actually needs to know:
+# MAGIC | Tier | Rule | Action (from the rulebook) |
+# MAGIC |---|---|---|
+# MAGIC | **Act** | High heat forecast, or High-heat alert (a meaningful chance of High) | High-heat action: call or visit before 11 am |
+# MAGIC | **Check in** | Moderate heat forecast **and** among the most exposed quarter of areas | Moderate-heat action: phone check-in |
+# MAGIC | **Routine** | Everything else | Routine check-ins |
+# MAGIC
+# MAGIC Haze actions are added whenever the area's PSI is Unhealthy or worse. Within each tier, areas are ordered by risk score.
 
 # COMMAND ----------
 
-@dlt.table(comment="Ranked check-in list: in-scope subzones (≥ 50 residents aged 65+) ranked by risk score (heat, haze, vulnerability, access to cool spaces), with the reason and the rulebook action. "
-                   "Heat basis: tomorrow's model forecast when available, otherwise the latest observed afternoon peak (see heat_basis).")
-@dlt.expect("has_heat", "heat_component IS NOT NULL")
+def blend_stations(values, value_cols, keys=()):
+    """Station values → subzone values with the inverse-distance weights (re-normalised over stations that reported)."""
+    w = spark.read.table("gold_subzone_station_weights").select("subzone_name", "station_id", "weight")
+    j = w.join(values, "station_id")
+    aggs = [(F.sum(F.col("weight") * F.col(c)) / F.sum(F.when(F.col(c).isNotNull(), F.col("weight")))).alias(c) for c in value_cols]
+    return j.groupBy("subzone_name", *keys).agg(*aggs)
+
+def score_and_tier(df, partition=()):
+    """Adds hazard, exposure, risk_score, tier, action_band and main_driver. Expects heat_is_forecast, heat_band, high_alert,
+    prob_moderate_plus, prob_high, psi_twenty_four_hourly, psi_band, vulnerability_score and cool_space_km."""
+    obs = F.create_map(*[x for k, v in OBSERVED_HAZARD.items() for x in (F.lit(k), F.lit(v))])
+    heat_hazard = F.when(F.col("heat_is_forecast"),
+                         0.5 * F.col("prob_moderate_plus") + 0.5 * F.least(F.lit(1.0), F.col("prob_high") / P_HIGH_FULL)
+                         ).otherwise(obs[F.col("heat_band")])
+    df = (df.withColumn("action_band", F.when(F.col("high_alert"), F.lit("High")).otherwise(F.col("heat_band")))
+            .withColumn("heat_hazard", F.round(F.coalesce(heat_hazard, F.lit(0.0)), 4))
+            .withColumn("haze_component", F.coalesce(F.round(clamp01((F.col("psi_twenty_four_hourly") - 50) / 150), 4), F.lit(0.0)))
+            .withColumn("haze_hazard", F.round(HAZE_IN_HAZARD * F.col("haze_component"), 4))
+            .withColumn("hazard", F.round(F.least(F.lit(1.0), F.col("heat_hazard") + F.col("haze_hazard")), 4))
+            .withColumn("access_component", F.round(clamp01(F.col("cool_space_km") / FAR_FROM_COOL_SPACE_KM), 4))
+            .withColumn("exposure", F.round(EXPOSURE_WEIGHTS["vulnerability"] * F.col("vulnerability_score")
+                                            + EXPOSURE_WEIGHTS["access"] * F.col("access_component"), 4))
+            .withColumn("exposure_pctl", F.round(F.percent_rank().over(W.partitionBy(*partition).orderBy("exposure")), 4))
+            .withColumn("risk_score", F.round(100 * F.col("hazard") * F.col("exposure"), 1)))
+    severe_haze = F.col("psi_band").isin("Very unhealthy", "Hazardous")
+    df = (df.withColumn("tier", F.when(F.col("action_band") == "High", "Act")
+                                 .when(((F.col("action_band") == "Moderate") | severe_haze) & (F.col("exposure_pctl") >= CHECKIN_EXPOSURE_PCTL), "Check in")
+                                 .otherwise("Routine"))
+            .withColumn("tier_order", F.create_map(*[x for k, v in TIERS.items() for x in (F.lit(k), F.lit(v))])[F.col("tier")])
+            .withColumn("main_driver", F.when(F.col("tier") == "Act", "heat")
+                                        .when(F.col("haze_hazard") > F.col("heat_hazard"), "haze")
+                                        .when(EXPOSURE_WEIGHTS["access"] * F.col("access_component") > EXPOSURE_WEIGHTS["vulnerability"] * F.col("vulnerability_score"), "access")
+                                        .otherwise("vulnerability"))
+            .withColumn("rank", F.row_number().over(W.partitionBy(*partition).orderBy(
+                "tier_order", F.col("risk_score").desc_nulls_last(), F.col("pop_65_plus").desc()))))
+    return df
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: the ranked check-in list
+# MAGIC
+# MAGIC **What it does:** the table coordinators act on. For every in-scope subzone (≥ 50 residents aged 65+):
+# MAGIC 1. **Heat** — tomorrow's forecast afternoon peak and the chance of Moderate and High heat when available, otherwise the latest observed peak
+# MAGIC    (`heat_basis` says which).
+# MAGIC 2. **Hazard, exposure, risk score and tier** — see the cell above.
+# MAGIC 3. **Reason** — one plain-English line with the real numbers, and the **action** from the rulebook for the tier and haze level.
+# MAGIC
+# MAGIC The `has_heat` expectation flags any subzone without a heat value (e.g. all its nearby stations offline).
+
+# COMMAND ----------
+
+@dlt.table(comment="Ranked check-in list: in-scope subzones (≥ 50 residents aged 65+) with tier (Act / Check in / Routine), risk score = 100 × hazard × exposure, "
+                   "the reason and the rulebook action. Heat basis: tomorrow's model forecast when available, otherwise the latest observed afternoon peak.")
+@dlt.expect("has_heat", "heat_band IS NOT NULL")
 def gold_checkin_list():
     p = spark.read.table("gold_subzone_profile").where("in_scope")
     c = spark.read.table("gold_subzone_conditions").drop("haze_region")
     rules = spark.read.table("gold_rulebook")
-    heat_rules = rules.where("trigger = 'heat'").select(F.col("level").alias("action_band"), F.col("action").alias("heat_action"))
+    heat_rules = rules.where("trigger = 'heat'").select(F.col("level").alias("rule_level"), F.col("action").alias("heat_action"))
     haze_rules = rules.where("trigger = 'haze'").select(F.col("level").alias("psi_band"), F.col("action").alias("haze_action"))
 
     is_fc = F.col("wbgt_forecast_c").isNotNull()
@@ -825,37 +894,29 @@ def gold_checkin_list():
           .withColumn("heat_wbgt_c", F.coalesce("wbgt_forecast_c", "wbgt_afternoon_peak_c"))
           .withColumn("heat_band", wbgt_band(F.col("heat_wbgt_c")))
           .withColumn("high_alert", F.coalesce(is_fc & F.col("high_alert"), F.lit(False)))
-          .withColumn("action_band", F.when(F.col("high_alert"), F.lit("High")).otherwise(F.col("heat_band")))
           .withColumn("for_date", F.when(is_fc, F.col("forecast_target_date")).otherwise(F.col("peak_date_sgt")))
           .withColumn("heat_basis", F.when(is_fc, F.concat(F.lit("Forecast for "), F.date_format("forecast_target_date", "EEE d MMM yyyy"),
                                                               F.lit(" (model v"), F.col("forecast_model_version"), F.lit(")")))
-                                     .otherwise(F.concat(F.lit("Observed afternoon peak on "), F.date_format("peak_date_sgt", "EEE d MMM yyyy"))))
-          .withColumn("heat_component", F.round(clamp01((F.col("heat_wbgt_c") - 29) / 5), 4))
-          .withColumn("haze_component", F.coalesce(F.round(clamp01((F.col("psi_twenty_four_hourly") - 50) / 150), 4), F.lit(0.0)))
-          .withColumn("access_component", F.round(clamp01(F.col("cool_space_km") / FAR_FROM_COOL_SPACE_KM), 4))
-          .withColumn("vulnerability_component", F.col("vulnerability_score")))
-    contrib = {k: F.lit(w) * F.col(f"{k}_component") for k, (w, _) in SCORE_WEIGHTS.items()}
-    df = df.withColumn("risk_score", F.round(100 * sum(contrib.values()), 1))
-
-    # Main driver = the component contributing most points
-    drivers = F.array(*[F.struct(v.alias("pts"), F.lit(k).alias("name")) for k, v in contrib.items()])
-    df = df.withColumn("main_driver", F.array_max(drivers)["name"])
+                                     .otherwise(F.concat(F.lit("Observed afternoon peak on "), F.date_format("peak_date_sgt", "EEE d MMM yyyy")))))
+    df = score_and_tier(df)
 
     pct = lambda col: F.concat(F.round(F.col(col) * 100, 0).cast("int").cast("string"), F.lit("%"))
     df = df.withColumn("reason", F.concat_ws(" · ",
-        F.when(F.col("high_alert"), F.concat(F.lit("High heat possible ("), F.round(F.col("prob_high") * 100, 0).cast("int").cast("string"), F.lit("% chance)"))),
+        F.when(F.col("high_alert") & (F.col("heat_band") != "High"),
+               F.concat(F.lit("High heat possible ("), F.round(F.col("prob_high") * 100, 0).cast("int").cast("string"), F.lit("% chance)"))),
         F.concat(F.when(is_fc, F.lit("Forecast heat: WBGT ")).otherwise(F.lit("Heat: WBGT ")),
                  F.col("heat_wbgt_c").cast("string"), F.lit(" °C ("), F.col("heat_band"), F.lit(")")),
         F.concat(F.lit("Seniors: "), F.format_number("pop_65_plus", 0), F.lit(" aged 65+ ("), pct("pct_65_plus"), F.lit(" of residents)")),
-        F.when(F.col("pct_1_2_room") >= 0.05, F.concat(pct("pct_1_2_room"), F.lit(" in 1–2 room HDB flats"))),
+        F.when(F.col("exposure_pctl") >= CHECKIN_EXPOSURE_PCTL, F.lit("Among the most exposed quarter of areas")),
         F.concat(F.lit("Nearest cool space: "), F.col("nearest_cool_space"), F.lit(" ("), F.col("cool_space_km").cast("string"), F.lit(" km)")),
         F.concat(F.lit("Haze: PSI "), F.col("psi_twenty_four_hourly").cast("int").cast("string"), F.lit(" ("), F.col("psi_band"), F.lit(")"))))
 
-    df = (df.join(heat_rules, "action_band", "left").join(haze_rules, "psi_band", "left")
-            .withColumn("action", F.concat_ws(" ", "heat_action", "haze_action"))
-            .withColumn("rank", F.row_number().over(W.orderBy(F.col("risk_score").desc_nulls_last(), F.col("pop_65_plus").desc()))))
+    df = (df.withColumn("rule_level", F.when(F.col("tier") == "Act", "High").when(F.col("tier") == "Check in", "Moderate").otherwise("Low"))
+            .join(heat_rules, "rule_level", "left").join(haze_rules, "psi_band", "left")
+            .withColumn("action", F.concat_ws(" ", "heat_action", "haze_action")))
     return df.select(
-        "rank", "subzone_name", "planning_area", "ura_region", "risk_score", "main_driver", "reason", "action",
+        "rank", "tier", "subzone_name", "planning_area", "ura_region", "risk_score", "hazard", "exposure", "exposure_pctl",
+        "main_driver", "reason", "action",
         "heat_wbgt_c", "heat_band", "high_alert", "action_band", "heat_is_forecast", "heat_basis", "for_date", "prob_moderate_plus", "prob_high",
         "wbgt_latest_c", "latest_reading_ts", "wbgt_afternoon_peak_c", "peak_date_sgt",
         "psi_twenty_four_hourly", "psi_band", "pm25_one_hourly", "psi_reading_ts",
@@ -864,8 +925,109 @@ def gold_checkin_list():
         "vulnerability_score", "nearest_cool_space", "nearest_cool_space_type", "nearest_cool_space_street",
         "nearest_cool_space_postal", "cool_space_km", "cool_spaces_within_1km",
         "nearest_wbgt_station", "nearest_wbgt_station_km", "haze_region",
-        "heat_component", "haze_component", "vulnerability_component", "access_component",
+        "heat_hazard", "haze_hazard", "haze_component", "access_component",
         "centroid_latitude", "centroid_longitude")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: the day outlook (one line for the coordinator)
+# MAGIC
+# MAGIC **What it does:** sums the list up into the single message a coordinator needs first — *is tomorrow a day to act, and for how many seniors?*
+# MAGIC
+# MAGIC | Level | When | Headline |
+# MAGIC |---|---|---|
+# MAGIC | **High-heat risk** | at least one area in **Act** | "High-heat risk on Thu 15 Oct in 3 areas — 4,430 seniors…" |
+# MAGIC | **Take care** | no Act areas, at least one **Check in** area | "Moderate heat on … check in on N high-exposure areas" |
+# MAGIC | **Normal** | neither | "No heat risk … routine check-ins only" |
+
+# COMMAND ----------
+
+@dlt.table(comment="Day outlook: one row summarising the check-in list — level (High-heat risk / Take care / Normal), headline, and the number of areas and seniors in each tier.")
+def gold_day_outlook():
+    df = spark.read.table("gold_checkin_list")
+    agg = df.agg(
+        F.max("for_date").alias("for_date"), F.max("heat_basis").alias("heat_basis"), F.max(F.col("heat_is_forecast").cast("int")).cast("boolean").alias("is_forecast"),
+        F.count("*").alias("total_areas"), F.sum("pop_65_plus").alias("total_seniors"),
+        *[x for t in TIERS for x in (F.count(F.when(F.col("tier") == t, True)).alias(f"{t.lower().replace(' ', '')}_areas"),
+                                    F.coalesce(F.sum(F.when(F.col("tier") == t, F.col("pop_65_plus"))), F.lit(0)).alias(f"{t.lower().replace(' ', '')}_seniors"))],
+        F.round(F.max("prob_high"), 3).alias("max_prob_high"), F.round(F.max("heat_wbgt_c"), 1).alias("hottest_heat_c"),
+        F.max("psi_twenty_four_hourly").alias("worst_psi"), F.max_by("psi_band", "psi_twenty_four_hourly").alias("worst_psi_band"))
+    day = F.date_format("for_date", "EEE d MMM")
+    plural = lambda n, word: F.concat(F.col(n).cast("string"), F.lit(f" {word}"), F.when(F.col(n) == 1, F.lit("")).otherwise(F.lit("s")))
+    return (agg
+        .withColumn("level", F.when(F.col("act_areas") > 0, "High-heat risk").when(F.col("checkin_areas") > 0, "Take care").otherwise("Normal"))
+        .withColumn("headline", F.when(F.col("act_areas") > 0, F.concat(
+                F.lit("High-heat risk on "), day, F.lit(" in "), plural("act_areas", "area"), F.lit(" — "), F.format_number("act_seniors", 0),
+                F.lit(" seniors aged 65+ live there. Call or visit them before 11 am.")))
+            .when(F.col("checkin_areas") > 0, F.concat(
+                F.lit("Moderate heat on "), day, F.lit(". Check in on "), plural("checkin_areas", "high-exposure area"), F.lit(" ("),
+                F.format_number("checkin_seniors", 0), F.lit(" seniors aged 65+).")))
+            .otherwise(F.concat(F.lit("No heat risk on "), day, F.lit(". Routine check-ins only.")))))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Gold: replay — what HeatGuard would have said on past days
+# MAGIC
+# MAGIC **What it does:** runs exactly the same scoring and tiers on every day of the forecast model's **test period** (Jul–Oct 2026), using the
+# MAGIC forecasts that the model trained *before July* made the evening before (`ml_backtest_predictions`, written by `05_forecast_model`). It then
+# MAGIC compares each area's tier with what actually happened at its nearest weather station.
+# MAGIC
+# MAGIC This answers the question judges and coordinators will ask: *"On a real hot day, would HeatGuard have pointed us to the right places?"*
+# MAGIC - **`gold_replay_list`** — one row per day per area: forecast, tier, risk score, and the afternoon peak actually measured nearby.
+# MAGIC - **`gold_replay_summary`** — one row per day: areas and seniors in Act / Check in, areas that actually reached High, and how many were caught.
+# MAGIC
+# MAGIC Notes: station weights use today's station network (stations that did not report on a day are left out of that day's blend); haze is the
+# MAGIC 24-hour PSI known by 6 pm the evening before.
+
+# COMMAND ----------
+
+@dlt.table(comment="Replay of the check-in list on every test-period day (Jul–Oct 2026) using the forecasts made the evening before, with the afternoon peak actually measured at each area's nearest station.")
+def gold_replay_list():
+    bt = spark.read.table(f"{CATALOG}.{SCHEMA}.ml_backtest_predictions")
+    threshold = spark.read.table(f"{CATALOG}.{SCHEMA}.ml_model_evaluation").agg(F.max("alert_threshold").alias("thr"))
+    preds = bt.select("station_id", "target_date", "feature_date", F.col("predicted_peak_wbgt_c").alias("heat_wbgt_c"),
+                      "prob_moderate_plus", "prob_high", F.col("actual_peak_wbgt_c").alias("actual_c"))
+    sz = blend_stations(preds, ["heat_wbgt_c", "prob_moderate_plus", "prob_high"], keys=("target_date", "feature_date"))
+    nearest = (spark.read.table("gold_subzone_station_weights").where("station_rank = 1").select("subzone_name", "station_id")
+               .join(preds.select("station_id", "target_date", "actual_c"), "station_id")
+               .select("subzone_name", "target_date", F.col("actual_c").alias("actual_peak_nearest_c")))
+    psi = (spark.read.table("silver_psi").where(F.col("hour_sgt") <= 18)
+           .groupBy(F.col("date_sgt").alias("feature_date"), F.col("region").alias("haze_region"))
+           .agg(F.max_by("psi_twenty_four_hourly", "reading_ts").alias("psi_twenty_four_hourly")))
+    p = spark.read.table("gold_subzone_profile").where("in_scope").select(
+        "subzone_name", "planning_area", "pop_65_plus", "vulnerability_score", "cool_space_km", "haze_region", "centroid_latitude", "centroid_longitude")
+    df = (p.join(sz, "subzone_name").join(nearest, ["subzone_name", "target_date"], "left").join(psi, ["feature_date", "haze_region"], "left")
+            .crossJoin(threshold)
+            .withColumn("heat_wbgt_c", F.round("heat_wbgt_c", 1))
+            .withColumn("heat_is_forecast", F.lit(True))
+            .withColumn("heat_band", wbgt_band(F.col("heat_wbgt_c")))
+            .withColumn("high_alert", F.coalesce(F.col("prob_high") >= F.col("thr"), F.lit(False)))
+            .withColumn("psi_band", psi_band(F.col("psi_twenty_four_hourly"))))
+    df = score_and_tier(df, partition=("target_date",))
+    return (df.withColumn("actual_band_nearest", wbgt_band(F.col("actual_peak_nearest_c")))
+              .withColumn("actually_high", F.coalesce(F.col("actual_band_nearest") == "High", F.lit(False)))
+              .select("target_date", "rank", "tier", "subzone_name", "planning_area", "pop_65_plus", "risk_score", "hazard", "exposure",
+                      "heat_wbgt_c", "heat_band", "prob_moderate_plus", "prob_high", "high_alert", "psi_twenty_four_hourly", "psi_band",
+                      "actual_peak_nearest_c", "actual_band_nearest", "actually_high", "centroid_latitude", "centroid_longitude"))
+
+@dlt.table(comment="Replay summary per test-period day: areas and seniors in Act / Check in, areas whose nearest station actually reached High heat, and how many of those HeatGuard put in Act or Check in the evening before.")
+def gold_replay_summary():
+    r = spark.read.table("gold_replay_list")
+    flagged = F.col("tier").isin("Act", "Check in")
+    return (r.groupBy("target_date").agg(
+                F.count("*").alias("areas"),
+                F.count(F.when(F.col("tier") == "Act", True)).alias("act_areas"),
+                F.coalesce(F.sum(F.when(F.col("tier") == "Act", F.col("pop_65_plus"))), F.lit(0)).alias("act_seniors"),
+                F.count(F.when(F.col("tier") == "Check in", True)).alias("checkin_areas"),
+                F.count(F.when(F.col("actually_high"), True)).alias("high_areas"),
+                F.coalesce(F.sum(F.when(F.col("actually_high"), F.col("pop_65_plus"))), F.lit(0)).alias("high_seniors"),
+                F.count(F.when(F.col("actually_high") & (F.col("tier") == "Act"), True)).alias("high_areas_in_act"),
+                F.count(F.when(F.col("actually_high") & flagged, True)).alias("high_areas_flagged"),
+                F.coalesce(F.sum(F.when(F.col("actually_high") & flagged, F.col("pop_65_plus"))), F.lit(0)).alias("high_seniors_flagged"),
+                F.round(F.max("actual_peak_nearest_c"), 1).alias("hottest_actual_c"))
+            .withColumn("share_high_areas_flagged", F.round(F.col("high_areas_flagged") / F.col("high_areas"), 3)))
 
 # COMMAND ----------
 
