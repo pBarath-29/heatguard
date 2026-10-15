@@ -90,6 +90,12 @@ export interface NearResponse {
   point: { target_date: string; heat_wbgt_c: number; prob_moderate_plus: number; prob_high: number; high_alert: boolean; stations: { name: string; distance_km: number }[] } | null;
   areas: (CheckinRow & { distance_km: number })[];
   cool_spaces: (CoolSpace & { distance_km: number })[];
+  plan: CentrePlan;
+}
+export interface CentrePlan {
+  for_date: string | null; level: "very_hot" | "hot" | "normal"; title: string; subtitle: string;
+  haze: { band: string; text: string } | null; todo: { id: string; when: string; text: string }[];
+  focus_areas: string[]; message_area: string | null;
 }
 
 export interface StationWeight { station_id: string; station_name: string; station_rank: number; distance_km: number; weight: number }
@@ -168,8 +174,8 @@ export const api = {
   about: () => request<AboutResponse>("/api/about"),
   coolSpaces: () => request<CoolSpace[]>("/api/cool-spaces"),
   messageOptions: () => request<MessageOptions>("/api/message/options"),
-  message: (subzone: string, language: string, audience: string) =>
-    request<{ text: string; used_ai: boolean }>("/api/message", { method: "POST", body: JSON.stringify({ subzone, language, audience }) }),
+  message: (subzone: string, language: string, audience: string, centre?: string) =>
+    request<{ text: string; used_ai: boolean }>("/api/message", { method: "POST", body: JSON.stringify({ subzone, language, audience, centre: centre ?? null }) }),
   genie: (question: string, conversation_id?: string | null) =>
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   refresh: () => request<{ ok: boolean }>("/api/refresh", { method: "POST" }),

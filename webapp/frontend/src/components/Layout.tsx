@@ -7,14 +7,14 @@ import { api } from "../lib/api";
 import { dayLabel } from "../lib/format";
 
 const NAV = [
-  { group: "Plan", items: [
-    { to: "/", label: "Today's plan", icon: ClipboardList, end: true },
-    { to: "/my-centre", label: "My centre", icon: Building2 },
-    { to: "/now", label: "Heat & haze now", icon: Activity },
-  ] },
-  { group: "Explore", items: [
-    { to: "/proof", label: "Proof: replay a hot day", icon: BadgeCheck },
+  { group: "For coordinators", items: [
+    { to: "/", label: "My plan", icon: Building2, end: true },
     { to: "/ask", label: "Ask HeatGuard", icon: MessagesSquare },
+  ] },
+  { group: "Planner & about", items: [
+    { to: "/planner", label: "Singapore-wide list", icon: ClipboardList },
+    { to: "/now", label: "Heat & haze now", icon: Activity },
+    { to: "/proof", label: "Proof: replay a hot day", icon: BadgeCheck },
     { to: "/accuracy", label: "Forecast accuracy", icon: BarChart3 },
     { to: "/about", label: "About & help", icon: BookOpen },
   ] },

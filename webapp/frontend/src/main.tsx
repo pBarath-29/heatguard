@@ -3,7 +3,7 @@ import "./index.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { EmptyState } from "./components/ui";
 import AboutPage from "./pages/AboutPage";
@@ -11,7 +11,7 @@ import AccuracyPage from "./pages/AccuracyPage";
 import AreaPage from "./pages/AreaPage";
 import AskPage from "./pages/AskPage";
 import CheckinPage from "./pages/CheckinPage";
-import MyCentrePage from "./pages/MyCentrePage";
+import HomePage from "./pages/HomePage";
 import NowPage from "./pages/NowPage";
 import ProofPage from "./pages/ProofPage";
 
@@ -25,15 +25,16 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<CheckinPage />} />
+            <Route index element={<HomePage />} />
+            <Route path="planner" element={<CheckinPage />} />
             <Route path="area/:name" element={<AreaPage />} />
             <Route path="now" element={<NowPage />} />
-            <Route path="my-centre" element={<MyCentrePage />} />
+            <Route path="my-centre" element={<Navigate to="/" replace />} />
             <Route path="proof" element={<ProofPage />} />
             <Route path="ask" element={<AskPage />} />
             <Route path="accuracy" element={<AccuracyPage />} />
             <Route path="about" element={<AboutPage />} />
-            <Route path="*" element={<EmptyState title="Page not found" body="That page doesn't exist." action={<Link className="text-sm font-medium text-brand-700" to="/">Go to the check-in list</Link>} />} />
+            <Route path="*" element={<EmptyState title="Page not found" body="That page doesn't exist." action={<Link className="text-sm font-medium text-brand-700" to="/">Go to my plan</Link>} />} />
           </Route>
         </Routes>
       </BrowserRouter>

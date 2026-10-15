@@ -17,7 +17,7 @@ AUDIENCES = {
 SYSTEM = ("You rewrite heat-safety outreach guidance for Active Ageing Centre staff in Singapore. "
           "Use ONLY the facts and actions provided. Do not add new actions, medical advice, phone numbers, places or numbers that are not given. "
           "Describe the heat and haze levels exactly as given (for example 'moderate heat stress'); do not exaggerate or play them down. "
-          "Keep it under 120 words. Write the whole message in {language}. Keep place names in English. Output only the message, without quotation marks.")
+          "Keep it under 120 words. Write the whole message in {language}. Keep place names in English but write dates and days in the chosen language. Output only the message, without quotation marks.")
 
 
 def _statement_to_table(sr):
@@ -88,13 +88,40 @@ def facts(row):
     return area, pa, day, heat, haze, cool, str(row.get("action") or "")
 
 
-def write_message(row, language, audience):
-    """Returns (text, used_ai). Falls back to the plain rulebook text if the model is unavailable."""
+_message_cache = {}
+
+
+def senior_advice(row):
+    """What seniors themselves should do — the senior-facing side of the HeatGuard rulebook (staff actions such as
+    'call or visit before 11 am' are left out)."""
+    very_hot = row.get("heat_band") == "High" or row.get("high_alert") or row.get("tier") == "Start here"
+    hot = very_hot or row.get("heat_band") == "Moderate"
+    cool = row.get("nearest_cool_space") or "the nearest Community Club"
+    parts = []
+    if very_hot:
+        parts.append(f"Stay indoors from 11 am to 4 pm. Drink water often, even if you are not thirsty. If your home gets too hot, go to {cool}, which is free and air-conditioned.")
+    elif hot:
+        parts.append(f"Avoid going out from 12 pm to 4 pm. Drink water often. If your home gets too hot, go to {cool}, which is free and air-conditioned.")
+    else:
+        parts.append("Have a normal day and drink enough water.")
+    if row.get("psi_band") in ("Unhealthy", "Very unhealthy", "Hazardous"):
+        parts.append("Because of the haze, keep windows closed and spend less time outdoors. If you have heart or lung problems, keep your medication with you.")
+    return " ".join(parts)
+
+
+def write_message(row, language, audience, centre=None):
+    """Returns (text, used_ai). Falls back to the plain rulebook text if the model is unavailable. Results are cached."""
     from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
     area, pa, day, heat, haze, cool, action = facts(row)
     if language not in LANGUAGES or audience not in AUDIENCES:
         raise DataError("Please choose a language and who the message is for.")
-    prompt = (f"Write {AUDIENCES[audience]}.\n\nArea: {area} ({pa}). Day: {day}. Heat: {heat}. Haze: {haze}. "
+    if audience == "seniors":
+        action = senior_advice(row)       # seniors get advice for themselves, never the staff instructions
+    key = (row.get("subzone_name"), row.get("for_date"), language, audience, centre)
+    if key in _message_cache:
+        return _message_cache[key], True
+    sign = f" Sign off as \"{centre}\"." if centre else ""
+    prompt = (f"Write {AUDIENCES[audience]}.{sign}\n\nArea: {area} ({pa}). Day: {day}. Heat: {heat}. Haze: {haze}. "
               f"Nearest air-conditioned place: {cool}.\nActions to include (keep all of them, no others):\n{action}")
     try:
         resp = workspace().serving_endpoints.query(
@@ -102,6 +129,8 @@ def write_message(row, language, audience):
             messages=[ChatMessage(role=ChatMessageRole.SYSTEM, content=SYSTEM.format(language=language)),
                       ChatMessage(role=ChatMessageRole.USER, content=prompt)],
             max_tokens=400, temperature=0.3)
-        return resp.choices[0].message.content.strip().strip('"“”').strip(), True
+        text = resp.choices[0].message.content.strip().strip('"“”').strip()
+        _message_cache[key] = text
+        return text, True
     except Exception:  # noqa: BLE001 — never leave the coordinator without a message
         return f"{area} — {day}\n{heat[0].upper() + heat[1:]}.\nNearest cool space: {cool}.\n\nWhat to do:\n{action}", False

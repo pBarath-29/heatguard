@@ -169,7 +169,62 @@ def near(postal: str):
 
     cool = query(f"SELECT name, space_type, latitude, longitude, street, postal_code FROM {S}.silver_cool_spaces").copy()
     cool["distance_km"] = [round(_haversine_km(lat, lon, a, b), 2) for a, b in zip(cool["latitude"], cool["longitude"])]
-    return {"place": place, "point": point, "areas": records(nearby), "cool_spaces": records(cool.nsmallest(3, "distance_km"))}
+    cool_near = cool.nsmallest(3, "distance_km")
+    return {"place": place, "point": point, "areas": records(nearby), "cool_spaces": records(cool_near),
+            "plan": centre_plan(point, nearby, cool_near, df)}
+
+
+TIER_ORDER = {"Start here": 1, "Check in": 2, "Routine": 3}
+
+
+def centre_plan(point, nearby, cool, all_rows):
+    """Plain-language plan for a coordinator: how hot, what to do and when (wording follows the HeatGuard rulebook)."""
+    ordered = nearby.assign(_t=nearby["tier"].map(TIER_ORDER)).sort_values(["_t", "risk_score"], ascending=[True, False])
+    focus = [str(n).title() for n in ordered["subzone_name"].head(2)]
+    focus_text = " and ".join(focus) if focus else "your area"
+    closest = nearby.nsmallest(1, "distance_km")
+    psi_band = closest["psi_band"].iloc[0] if len(closest) else None
+    cool_name = cool["name"].iloc[0] if len(cool) else "the nearest Community Club"
+    for_date = all_rows["for_date"].max()
+    for_date = str(for_date.date() if hasattr(for_date, "date") else for_date)[:10] if for_date is not None else None
+
+    if point is None:
+        heat = ordered["heat_band"].iloc[0] if len(ordered) else "Low"
+        very_hot = heat == "High"
+    else:
+        heat = "High" if point["heat_wbgt_c"] >= 33 else "Moderate" if point["heat_wbgt_c"] >= 31 else "Low"
+        very_hot = heat == "High" or point["high_alert"]
+    if very_hot:
+        level, title_, sub = "very_hot", "Very hot afternoon", "High heat stress is possible around your centre. Hottest between 12 pm and 4 pm."
+    elif heat == "Moderate":
+        level, title_, sub = "hot", "Hot afternoon", "Moderate heat stress around your centre. Hottest between 12 pm and 4 pm."
+    else:
+        level, title_, sub = "normal", "Normal afternoon", "No heat stress expected around your centre."
+
+    haze = None
+    if psi_band in ("Unhealthy", "Very unhealthy", "Hazardous"):
+        haze = {"band": psi_band, "text": f"Haze is {psi_band.lower()}: keep windows closed and limit time outdoors."}
+
+    todo = []
+    if level == "very_hot":
+        todo = [
+            {"id": "send", "when": "Tonight", "text": "Send the heat reminder to your seniors (ready below)."},
+            {"id": "call", "when": "Before 11 am", "text": f"Call or visit seniors who live alone, starting with {focus_text}."},
+            {"id": "indoors", "when": "12 pm – 4 pm", "text": f"Remind them to stay indoors, drink water often, and come to {cool_name} if home is too hot."},
+        ]
+    elif level == "hot":
+        todo = [
+            {"id": "send", "when": "Tonight", "text": "Send the heat reminder to your seniors (ready below)."},
+            {"id": "call", "when": "Tomorrow morning", "text": f"Phone seniors who live alone, starting with {focus_text}."},
+            {"id": "indoors", "when": "12 pm – 4 pm", "text": "Remind them to avoid going out and to keep drinking water."},
+        ]
+    else:
+        todo = [{"id": "routine", "when": "Tomorrow", "text": "Routine check-ins. No extra heat steps needed."}]
+    if haze:
+        todo.append({"id": "haze", "when": "In the morning", "text": "Check that seniors with heart or lung conditions have their medication. Keep windows closed."})
+    lead = ordered["subzone_name"].iloc[0] if len(ordered) else None
+    return {"for_date": for_date, "level": level, "title": title_, "subtitle": sub, "haze": haze, "todo": todo,
+            "focus_areas": focus, "message_area": lead}
 
 
 @app.get("/api/now")
@@ -226,6 +281,7 @@ class MessageBody(BaseModel):
     subzone: str
     language: str
     audience: str
+    centre: Optional[str] = None
 
 
 @app.get("/api/message/options")
@@ -240,7 +296,7 @@ def message(body: MessageBody):
     row = df[df["subzone_name"] == body.subzone.upper()]
     if row.empty:
         raise HTTPException(404, detail="That area isn't on the check-in list.")
-    text, used_ai = ai.write_message(records(row)[0], body.language, body.audience)
+    text, used_ai = ai.write_message(records(row)[0], body.language, body.audience, body.centre)
     return {"text": text, "used_ai": used_ai}
 
 

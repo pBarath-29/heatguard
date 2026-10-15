@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Gauge, MapPin, MessageSquareText, Snowflake, Thermometer, Users } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import MessageDialog from "../components/MessageDialog";
 import { Badge, BandBadge, Button, Card, CardTitle, ErrorState, PageSkeleton, PsiBadge, ScoreRing, TierBadge } from "../components/ui";
@@ -99,6 +99,8 @@ export default function AreaPage() {
   const { name = "" } = useParams();
   const q = useQuery({ queryKey: ["area", name], queryFn: () => api.area(name), retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 1 });
   const [messageOpen, setMessageOpen] = useState(false);
+  const navigate = useNavigate();
+  const back = (e: React.MouseEvent) => { if (window.history.length > 1) { e.preventDefault(); navigate(-1); } };
 
   if (q.isPending) return <PageSkeleton rows={2} />;
   if (q.isError) return (
@@ -118,7 +120,7 @@ export default function AreaPage() {
 
   return (
     <>
-      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"><ArrowLeft className="h-4 w-4" /> Back to the list</Link>
+      <Link to="/" onClick={back} className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"><ArrowLeft className="h-4 w-4" /> Back</Link>
       <Card className="mb-5">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
