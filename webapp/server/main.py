@@ -63,8 +63,10 @@ def checkin():
         status = "today"
     else:
         status = "tomorrow"
+    outlook = records(query(f"SELECT * FROM {S}.gold_day_outlook"))
     return {"meta": {"for_date": str(for_date) if for_date else None, "today": str(today), "status": status,
                      "heat_basis": basis, "is_forecast": is_fc, "areas": int(len(df))},
+            "outlook": outlook[0] if outlook else None,
             "rows": records(df)}
 
 
@@ -89,6 +91,85 @@ def area(subzone: str):
     weights = query(f"SELECT * FROM {S}.gold_score_weights")
     return {"row": records(row)[0], "total_areas": int(len(df)), "stations": records(stations),
             "peaks": records(peaks), "forecasts": records(forecasts), "weights": records(weights)}
+
+
+@app.get("/api/replay")
+def replay_summary():
+    days = query(f"SELECT * FROM {S}.gold_replay_summary ORDER BY target_date")
+    return {"days": records(days),
+            "totals": {"days": int(len(days)), "days_with_high": int((days["high_areas"] > 0).sum()),
+                       "start_here_hits": int(days["start_here_hits"].sum()), "census_top10_hits": int(days["census_top10_hits"].sum()),
+                       "start_here_areas": int(days["start_here_areas"].sum()), "high_area_days": int(days["high_areas"].sum())}}
+
+
+@app.get("/api/replay/{day}")
+def replay_day(day: str):
+    try:
+        d = dt.date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(400, detail="Please give the day as YYYY-MM-DD.")
+    rows = query(f"""SELECT r.*, row_number() OVER (ORDER BY r.exposure DESC) AS census_rank
+                     FROM {S}.gold_replay_list r WHERE r.target_date = :d ORDER BY r.rank""", {"d": str(d)})
+    if rows.empty:
+        raise HTTPException(404, detail="No replay for that day. Replays cover the forecast model's test period.")
+    return {"day": str(d), "rows": records(rows)}
+
+
+def _haversine_km(lat1, lon1, lat2, lon2):
+    import math
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+@app.get("/api/near")
+def near(postal: str):
+    """'My centre': postal code → location (OneMap) → tomorrow's heat there, nearby areas and cool spaces."""
+    import re
+    import requests
+    code = postal.strip()
+    if not re.fullmatch(r"\d{6}", code):
+        raise HTTPException(400, detail="Please enter a 6-digit Singapore postal code, e.g. 098917.")
+    try:
+        res = requests.get("https://www.onemap.gov.sg/api/common/elastic/search",
+                           params={"searchVal": code, "returnGeom": "Y", "getAddrDetails": "Y", "pageNum": 1}, timeout=15).json()
+    except Exception as e:  # noqa: BLE001
+        raise DataError("Couldn't reach OneMap to look up that postal code. Try again in a moment.", str(e)) from e
+    hits = [r for r in res.get("results", []) if r.get("POSTAL") == code] or res.get("results", [])
+    if not hits:
+        raise HTTPException(404, detail="No address found for that postal code. Check the number and try again.")
+    h = hits[0]
+    lat, lon = float(h["LATITUDE"]), float(h["LONGITUDE"])
+    place = {"name": h.get("BUILDING") if h.get("BUILDING") not in (None, "NIL") else h.get("SEARCHVAL"),
+             "address": h.get("ADDRESS"), "postal": code, "latitude": lat, "longitude": lon}
+
+    df = checkin_rows().copy()
+    df["distance_km"] = [round(_haversine_km(lat, lon, a, b), 2) for a, b in zip(df["centroid_latitude"], df["centroid_longitude"])]
+    nearby = df[df["distance_km"] <= 1.5].sort_values(["distance_km"])
+    if nearby.empty:
+        nearby = df.nsmallest(3, "distance_km")
+
+    fc = query(f"""SELECT f.station_id, f.station_name, f.target_date, f.predicted_peak_wbgt_c, f.prob_moderate_plus, f.prob_high,
+                          f.high_alert_threshold, s.latitude, s.longitude
+                   FROM {S}.ml_wbgt_forecast f JOIN {S}.silver_wbgt_stations s USING (station_id)
+                   WHERE f.target_date = (SELECT max(target_date) FROM {S}.ml_wbgt_forecast)""")
+    point = None
+    if len(fc):
+        fc = fc.copy()
+        fc["d"] = [max(0.2, _haversine_km(lat, lon, a, b)) for a, b in zip(fc["latitude"], fc["longitude"])]
+        near3 = fc.nsmallest(3, "d")
+        w = 1 / near3["d"] ** 2
+        blend = lambda c: float((near3[c] * w).sum() / w.sum())
+        prob_high = blend("prob_high")
+        point = {"target_date": str(near3["target_date"].iloc[0]), "heat_wbgt_c": round(blend("predicted_peak_wbgt_c"), 1),
+                 "prob_moderate_plus": round(blend("prob_moderate_plus"), 3), "prob_high": round(prob_high, 3),
+                 "high_alert": bool(prob_high >= float(near3["high_alert_threshold"].max())),
+                 "stations": [{"name": n, "distance_km": round(d, 1)} for n, d in zip(near3["station_name"], near3["d"])]}
+
+    cool = query(f"SELECT name, space_type, latitude, longitude, street, postal_code FROM {S}.silver_cool_spaces").copy()
+    cool["distance_km"] = [round(_haversine_km(lat, lon, a, b), 2) for a, b in zip(cool["latitude"], cool["longitude"])]
+    return {"place": place, "point": point, "areas": records(nearby), "cool_spaces": records(cool.nsmallest(3, "distance_km"))}
 
 
 @app.get("/api/now")

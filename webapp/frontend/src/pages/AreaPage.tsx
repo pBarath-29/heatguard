@@ -2,65 +2,58 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Gauge, MapPin, MessageSquareText, Snowflake, Thermometer, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import MessageDialog from "../components/MessageDialog";
-import { Badge, BandBadge, Button, Card, CardTitle, ErrorState, PageSkeleton, PsiBadge, ScoreRing } from "../components/ui";
+import { Badge, BandBadge, Button, Card, CardTitle, ErrorState, PageSkeleton, PsiBadge, ScoreRing, TierBadge } from "../components/ui";
 import { ApiError, api, type AreaResponse } from "../lib/api";
 import { dayLabel, deg, num, pct, shortDate, title } from "../lib/format";
-import { BAND, CHART, COMPONENT_COLORS, DRIVER } from "../lib/theme";
+import { BAND, CHART, COMPONENT_COLORS, DRIVER, TIER } from "../lib/theme";
 
-const PARTS: { key: "heat" | "vulnerability" | "haze" | "access"; label: string }[] = [
-  { key: "heat", label: "Heat" }, { key: "vulnerability", label: "Vulnerable seniors" },
-  { key: "haze", label: "Haze" }, { key: "access", label: "Distance to cool space" },
-];
-const STATION_COLORS = ["#EA580C", "#7C3AED", "#0284C7"];
+function Part({ label, value, max, color, note }: { label: string; value: number; max: number; color: string; note: string }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-sm"><span className="font-medium text-ink-800">{label}</span><span className="tabular-nums text-ink-500"><b className="text-ink-900">{value.toFixed(2)}</b> / {max}</span></div>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full" style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color }} /></div>
+      <p className="mt-1 text-[13px] leading-relaxed text-ink-500">{note}</p>
+    </div>
+  );
+}
 
 function Breakdown({ data }: { data: AreaResponse }) {
-  const { row, weights } = data;
-  const w = Object.fromEntries(weights.filter((x) => x.score === "risk_score").map((x) => [x.component, x.weight]));
-  const explain: Record<string, string> = {
-    heat: row.heat_wbgt_c != null ? `${deg(row.heat_wbgt_c)} (${row.heat_band}). Scores nothing at 29°C and fully at 34°C.` : "No heat value.",
-    vulnerability: `${row.vulnerability_score.toFixed(2)} of 1 — compared with other areas on seniors, small flats, living alone and daily-activity difficulty.`,
-    haze: row.psi_twenty_four_hourly != null ? `PSI ${Math.round(row.psi_twenty_four_hourly)} (${row.psi_band}). Scores nothing up to PSI 50 and fully at 200.` : "No haze reading.",
-    access: `${row.cool_space_km} km to ${row.nearest_cool_space}. Scores nothing at the door and fully at 2 km or more.`,
-  };
-  const comp: Record<string, number | null> = { heat: row.heat_component, vulnerability: row.vulnerability_component, haze: row.haze_component, access: row.access_component };
-  const bars = PARTS.map((p) => ({ ...p, points: +(100 * (w[p.key] ?? 0) * (comp[p.key] ?? 0)).toFixed(1), max: Math.round(100 * (w[p.key] ?? 0)) }));
+  const r = data.row;
+  const vulnPart = 0.7 * r.vulnerability_score, accessPart = 0.3 * (r.access_component ?? 0);
   return (
     <Card>
-      <CardTitle icon={<Gauge className="h-4 w-4" />} title="How the risk score adds up" subtitle={`${Math.round(row.risk_score)} points out of 100, from four parts`} />
-      <div className="grid gap-6 lg:grid-cols-5">
-        <div className="h-56 lg:col-span-2">
-          <ResponsiveContainer>
-            <BarChart data={bars} layout="vertical" margin={{ left: 8, right: 24 }}>
-              <CartesianGrid horizontal={false} stroke={CHART.grid} />
-              <XAxis type="number" domain={[0, 35]} tick={{ fontSize: 12, fill: CHART.axis }} />
-              <YAxis type="category" dataKey="label" width={130} tick={{ fontSize: 12, fill: CHART.ink }} />
-              <Tooltip formatter={(v: number, _n, p) => [`${v} of ${p.payload.max} points`, "Score"]} cursor={{ fill: "#F8FAFC" }} />
-              <Bar dataKey="points" barSize={18} radius={[0, 6, 6, 0]} background={{ fill: "#F1F5F9", radius: 6 }}>
-                {bars.map((b) => <Cell key={b.key} fill={COMPONENT_COLORS[b.key]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      <CardTitle icon={<Gauge className="h-4 w-4" />} title="How the risk score is worked out" subtitle="Risk = how dangerous the day is × how exposed the people here are" />
+      <div className="mb-6 flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-ink-50 px-4 py-5 text-center">
+        <div><div className="text-3xl font-semibold tabular-nums" style={{ color: COMPONENT_COLORS.heat }}>{r.hazard.toFixed(2)}</div><div className="text-xs font-medium uppercase tracking-wide text-ink-500">Hazard</div></div>
+        <span className="text-2xl text-ink-300">×</span>
+        <div><div className="text-3xl font-semibold tabular-nums" style={{ color: COMPONENT_COLORS.vulnerability }}>{r.exposure.toFixed(2)}</div><div className="text-xs font-medium uppercase tracking-wide text-ink-500">Exposure</div></div>
+        <span className="text-2xl text-ink-300">× 100 =</span>
+        <div><div className="text-3xl font-semibold tabular-nums text-ink-900">{Math.round(r.risk_score)}</div><div className="text-xs font-medium uppercase tracking-wide text-ink-500">Risk score</div></div>
+      </div>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-ink-900">Hazard — how dangerous {r.heat_is_forecast ? "the forecast day" : "the day"} is</h4>
+          <Part label="Heat" value={r.heat_hazard} max={1} color={COMPONENT_COLORS.heat}
+            note={r.heat_is_forecast ? `Half from the ${pct(r.prob_moderate_plus)} chance of Moderate-or-higher heat, half from the ${pct(r.prob_high)} chance of High heat (full at 50%).` : `Fixed value for the observed ${r.heat_band} band (no forecast available).`} />
+          <Part label="Haze" value={r.haze_hazard} max={0.3} color={COMPONENT_COLORS.haze}
+            note={r.psi_twenty_four_hourly != null ? `PSI ${Math.round(r.psi_twenty_four_hourly)} (${r.psi_band}). Adds nothing at PSI 50 and up to 0.3 at PSI 200.` : "No haze reading."} />
         </div>
-        <div className="space-y-3 lg:col-span-3">
-          {bars.map((b) => (
-            <div key={b.key} className="flex gap-3">
-              <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COMPONENT_COLORS[b.key] }} />
-              <div className="flex-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-sm font-medium text-ink-900">{b.label}</span>
-                  <span className="text-sm tabular-nums text-ink-500"><b className="text-ink-900">{b.points}</b> / {b.max}</span>
-                </div>
-                <p className="text-[13px] leading-relaxed text-ink-500">{explain[b.key]}</p>
-              </div>
-            </div>
-          ))}
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold text-ink-900">Exposure — who would be affected here</h4>
+          <Part label="Vulnerable seniors (70%)" value={vulnPart} max={0.7} color={COMPONENT_COLORS.vulnerability}
+            note={`Vulnerability ${r.vulnerability_score.toFixed(2)} of 1, compared with other areas on seniors, small flats, living alone and daily-activity difficulty.`} />
+          <Part label="Distance to a cool space (30%)" value={accessPart} max={0.3} color={COMPONENT_COLORS.access}
+            note={`${r.cool_space_km} km to ${r.nearest_cool_space}. Nothing at the door, full at 2 km or more.`} />
+          <p className="text-[13px] text-ink-500">More exposed than {pct(r.exposure_pctl)} of areas with seniors.</p>
         </div>
       </div>
     </Card>
   );
 }
+
+const STATION_COLORS = ["#EA580C", "#7C3AED", "#0284C7"];
 
 function Trend({ data }: { data: AreaResponse }) {
   const names = [...new Set(data.stations.map((s) => s.station_name))];
@@ -116,7 +109,7 @@ export default function AreaPage() {
   );
   const data = q.data;
   const r = data.row;
-  const band = r.action_band ? BAND[r.action_band] : null;
+  const band = r.heat_band ? BAND[r.heat_band] : null;
   const nearest = Math.min(...data.stations.map((s) => s.distance_km));
   const confidence = nearest <= 2 ? ["High", `Measured by a station ${nearest.toFixed(1)} km away.`] :
     nearest <= 5 ? ["Medium", `Nearest station ${nearest.toFixed(1)} km away; heat is blended from ${data.stations.length} stations.`] :
@@ -129,10 +122,11 @@ export default function AreaPage() {
       <Card className="mb-5">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <div className="text-[13px] font-medium text-ink-500">Priority #{r.rank} of {data.total_areas} · {title(r.planning_area)} · {title(r.ura_region)}</div>
+            <div className="text-[13px] font-medium text-ink-500">#{r.rank} of {data.total_areas} · {title(r.planning_area)} · {title(r.ura_region)}</div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 md:text-[28px]">{title(r.subzone_name)}</h1>
             <div className="mt-3 flex flex-wrap gap-2">
-              <BandBadge band={r.action_band} prefix="Heat: " />
+              <TierBadge tier={r.tier} />
+              <BandBadge band={r.heat_band} prefix="Heat: " />
               {r.high_alert && r.heat_band !== "High" && <Badge className="bg-red-600 text-white ring-red-700/20"><AlertTriangle className="h-3 w-3" /> High heat possible · {pct(r.prob_high)}</Badge>}
               <PsiBadge band={r.psi_band} value={r.psi_twenty_four_hourly} />
               <Badge className="bg-brand-50 text-brand-800 ring-brand-600/20">Main reason: {DRIVER[r.main_driver]?.label}</Badge>
@@ -140,7 +134,7 @@ export default function AreaPage() {
             <p className="mt-3 text-[13px] text-ink-500">{r.heat_basis}</p>
           </div>
           <div className="flex items-center gap-4">
-            <ScoreRing score={r.risk_score} color={band?.hex ?? "#94A3B8"} size={84} />
+            <ScoreRing score={r.risk_score} color={TIER[r.tier]?.hex ?? "#94A3B8"} size={84} />
             <Button variant="primary" icon={<MessageSquareText className="h-4 w-4" />} onClick={() => setMessageOpen(true)}>Write a message</Button>
           </div>
         </div>

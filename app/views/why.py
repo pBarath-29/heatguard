@@ -73,17 +73,22 @@ def render():
         if c1.button("Write a message for this area", icon=":material/sms:", key="why_msg"):
             message_dialog(row.to_dict())
 
-    st.subheader("How the risk score adds up")
-    weights = data.score_weights()
-    bd = _breakdown(row, weights)
-    chart = alt.Chart(bd).mark_bar(cornerRadiusEnd=4).encode(
-        y=alt.Y("Part:N", sort=None, title=None), x=alt.X("Points:Q", title="Points (out of 100 in total)", scale=alt.Scale(domain=[0, 35])),
-        color=alt.Color("Part:N", scale=alt.Scale(domain=list(COMPONENT_COLORS), range=list(COMPONENT_COLORS.values())), legend=None),
-        tooltip=["Part", "Points", "Maximum", "What it means"])
-    st.altair_chart(chart.properties(height=190))
+    st.subheader("How the risk score is worked out")
+    st.caption("Risk = how dangerous the day is (hazard) × how exposed the people here are (exposure) × 100")
+    m = st.columns(3)
+    m[0].metric("Hazard", f"{row['hazard']:.2f}", help="Half from the chance of Moderate-or-higher heat, half from the chance of High heat (full at 50%), plus up to 0.3 for haze.")
+    m[1].metric("Exposure", f"{row['exposure']:.2f}", help="70% vulnerability score + 30% distance to the nearest cool space.")
+    m[2].metric("Risk score", f"{row['risk_score']:.0f}", help=f"Priority tier: {row['tier']}")
+    bd = pd.DataFrame([
+        ("Hazard", "Heat", row["heat_hazard"], 1.0, f"{ui.pct(row['prob_moderate_plus'])} chance of Moderate-or-higher, {ui.pct(row['prob_high'])} chance of High" if row.get("heat_is_forecast") else f"Observed {row['heat_band']} band"),
+        ("Hazard", "Haze", row["haze_hazard"], 0.3, f"PSI {int(row['psi_twenty_four_hourly'])} ({row['psi_band']})" if pd.notna(row.get("psi_twenty_four_hourly")) else "No reading"),
+        ("Exposure", "Vulnerable seniors", 0.7 * row["vulnerability_score"], 0.7, f"Vulnerability {row['vulnerability_score']:.2f} of 1"),
+        ("Exposure", "Distance to a cool space", 0.3 * (row["access_component"] or 0), 0.3, f"{row['cool_space_km']} km to {row['nearest_cool_space']}"),
+    ], columns=["Part of", "Component", "Value", "Maximum", "What it means"])
     st.dataframe(bd, hide_index=True, width="stretch", column_config={
-        "Points": st.column_config.NumberColumn(format="%.1f"), "What it means": st.column_config.TextColumn(width="large")})
-    st.caption(f"Total risk score: **{row['risk_score']:.0f}**. Weights: heat 35, vulnerable seniors 35, haze 15, distance to a cool space 15.")
+        "Value": st.column_config.ProgressColumn(min_value=0, max_value=1, format="%.2f"),
+        "What it means": st.column_config.TextColumn(width="large")})
+    st.caption(f"Priority tier: **{row['tier']}** — more exposed than {ui.pct(row['exposure_pctl'])} of areas with seniors.")
 
     stations = data.station_weights(sel)
     c1, c2, c3 = st.columns(3)

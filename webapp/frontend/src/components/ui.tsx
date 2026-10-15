@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { AlertTriangle, ChevronDown, Info, Loader2, RefreshCw, SearchX } from "lucide-react";
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { ApiError, type Band } from "../lib/api";
-import { BAND, PSI } from "../lib/theme";
+import { BAND, PSI, TIER } from "../lib/theme";
 
 export function Card({ className, children, padded = true }: { className?: string; children: ReactNode; padded?: boolean }) {
   return <div className={clsx("rounded-2xl border border-ink-200/80 bg-white shadow-card", padded && "p-5", className)}>{children}</div>;
@@ -70,6 +70,11 @@ export function BandBadge({ band, prefix = "" }: { band: Band | null | undefined
   if (!band) return <Badge>{prefix}No data</Badge>;
   const b = BAND[band];
   return <Badge className={clsx(b.bg, b.text, b.ring)} dot={b.dot}>{prefix}{b.label}</Badge>;
+}
+
+export function TierBadge({ tier }: { tier: string }) {
+  const t = TIER[tier] ?? TIER.Routine;
+  return <Badge className={clsx(t.bg, t.text, t.ring, "font-semibold")}>{t.label}</Badge>;
 }
 
 export function PsiBadge({ band, value }: { band: string | null | undefined; value?: number | null }) {

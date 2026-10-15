@@ -1,7 +1,15 @@
 export type Band = "Low" | "Moderate" | "High";
 
+export type Tier = "Start here" | "Check in" | "Routine";
+
 export interface CheckinRow {
   rank: number;
+  tier: Tier;
+  hazard: number;
+  exposure: number;
+  exposure_pctl: number;
+  heat_hazard: number;
+  haze_hazard: number;
   subzone_name: string;
   planning_area: string;
   ura_region: string;
@@ -44,17 +52,44 @@ export interface CheckinRow {
   nearest_wbgt_station: string;
   nearest_wbgt_station_km: number;
   haze_region: string;
-  heat_component: number | null;
   haze_component: number | null;
-  vulnerability_component: number | null;
   access_component: number | null;
   centroid_latitude: number;
   centroid_longitude: number;
 }
 
+export interface DayOutlook {
+  for_date: string; level: "High heat possible" | "Moderate heat" | "Low heat"; headline: string; top_areas: string;
+  start_here_areas: number; start_here_seniors: number; check_in_areas: number; check_in_seniors: number; routine_areas: number;
+  high_alert_areas: number; moderate_areas: number; max_prob_high: number | null; hottest_heat_c: number | null;
+  worst_psi: number | null; worst_psi_band: string | null; total_areas: number; total_seniors: number;
+}
+
 export interface CheckinResponse {
   meta: { for_date: string | null; today: string; status: "tomorrow" | "today" | "past" | "observed" | "empty"; heat_basis: string; is_forecast: boolean; areas: number };
+  outlook: DayOutlook | null;
   rows: CheckinRow[];
+}
+
+export interface ReplayDay {
+  target_date: string; areas: number; start_here_areas: number; start_here_seniors: number; checkin_areas: number;
+  high_areas: number; high_seniors: number; start_here_hits: number; start_here_seniors_hit: number; census_top10_hits: number;
+  high_areas_flagged: number; hottest_actual_c: number | null; share_high_areas_flagged: number | null;
+}
+export interface ReplaySummary {
+  days: ReplayDay[];
+  totals: { days: number; days_with_high: number; start_here_hits: number; census_top10_hits: number; start_here_areas: number; high_area_days: number };
+}
+export interface ReplayRow {
+  target_date: string; rank: number; census_rank: number; tier: Tier; subzone_name: string; planning_area: string; pop_65_plus: number;
+  risk_score: number; hazard: number; exposure: number; heat_wbgt_c: number; heat_band: Band; prob_high: number; high_alert: boolean;
+  actual_peak_nearest_c: number | null; actual_band_nearest: Band | null; actually_high: boolean; centroid_latitude: number; centroid_longitude: number;
+}
+export interface NearResponse {
+  place: { name: string; address: string; postal: string; latitude: number; longitude: number };
+  point: { target_date: string; heat_wbgt_c: number; prob_moderate_plus: number; prob_high: number; high_alert: boolean; stations: { name: string; distance_km: number }[] } | null;
+  areas: (CheckinRow & { distance_km: number })[];
+  cool_spaces: (CoolSpace & { distance_km: number })[];
 }
 
 export interface StationWeight { station_id: string; station_name: string; station_rank: number; distance_km: number; weight: number }
@@ -138,4 +173,7 @@ export const api = {
   genie: (question: string, conversation_id?: string | null) =>
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   refresh: () => request<{ ok: boolean }>("/api/refresh", { method: "POST" }),
+  replay: () => request<ReplaySummary>("/api/replay"),
+  replayDay: (day: string) => request<{ day: string; rows: ReplayRow[] }>(`/api/replay/${day}`),
+  near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
 };

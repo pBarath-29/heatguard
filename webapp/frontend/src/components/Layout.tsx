@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Activity, BarChart3, BookOpen, ClipboardList, Menu, MessagesSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Activity, BadgeCheck, BarChart3, BookOpen, Building2, ClipboardList, Menu, MessagesSquare, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
@@ -8,10 +8,12 @@ import { dayLabel } from "../lib/format";
 
 const NAV = [
   { group: "Plan", items: [
-    { to: "/", label: "Check-in list", icon: ClipboardList, end: true },
+    { to: "/", label: "Today's plan", icon: ClipboardList, end: true },
+    { to: "/my-centre", label: "My centre", icon: Building2 },
     { to: "/now", label: "Heat & haze now", icon: Activity },
   ] },
   { group: "Explore", items: [
+    { to: "/proof", label: "Proof: replay a hot day", icon: BadgeCheck },
     { to: "/ask", label: "Ask HeatGuard", icon: MessagesSquare },
     { to: "/accuracy", label: "Forecast accuracy", icon: BarChart3 },
     { to: "/about", label: "About & help", icon: BookOpen },

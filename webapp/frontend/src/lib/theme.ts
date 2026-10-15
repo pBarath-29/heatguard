@@ -21,6 +21,12 @@ export const DRIVER: Record<string, { label: string; short: string }> = {
   access: { label: "Far from a cool space", short: "Distance to cool space" },
 };
 
+export const TIER: Record<string, { label: string; text: string; bg: string; ring: string; hex: string; blurb: string }> = {
+  "Start here": { label: "Start here", text: "text-white", bg: "bg-brand-600", ring: "ring-brand-700/20", hex: "#EA580C", blurb: "The 10 areas to reach first: highest risk where Moderate or High heat is forecast." },
+  "Check in": { label: "Check in", text: "text-amber-800", bg: "bg-amber-100", ring: "ring-amber-600/20", hex: "#D97706", blurb: "Other highly exposed areas with Moderate-or-worse heat: a phone check-in." },
+  Routine: { label: "Routine", text: "text-ink-600", bg: "bg-ink-100", ring: "ring-ink-500/10", hex: "#94A3B8", blurb: "No heat-specific action needed beyond routine check-ins." },
+};
+
 export const COMPONENT_COLORS: Record<string, string> = {
   heat: "#EA580C",
   vulnerability: "#7C3AED",

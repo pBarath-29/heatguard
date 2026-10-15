@@ -8,9 +8,10 @@ const STEPS = [
   { icon: Database, title: "Collect", body: "NEA heat-stress (WBGT) from ~30 stations every 15 minutes, NEA forecasts and haze for 5 regions, plus Census 2020, the URA subzone map, Community Clubs and libraries." },
   { icon: Eraser, title: "Clean", body: "A Databricks pipeline removes faulty sensor readings, duplicates and gaps, and counts every row it drops." },
   { icon: BrainCircuit, title: "Forecast", body: "A machine-learning model, tested on months it never saw, forecasts tomorrow afternoon's peak heat at each station and the chance it reaches High." },
-  { icon: ListOrdered, title: "Rank", body: "Each area with seniors gets a risk score from heat, haze, vulnerable seniors and distance to a cool space. Actions come from a fixed rulebook." },
+  { icon: ListOrdered, title: "Prioritise", body: "Risk = how dangerous tomorrow is × how exposed the seniors are. The 10 highest-risk areas become 'Start here'. Actions come from a fixed rulebook." },
 ];
 const NAMES: Record<string, string> = {
+  p_moderate_plus: "Chance of Moderate-or-higher heat", p_high: "Chance of High heat",
   heat: "Heat", haze: "Haze", vulnerability: "Vulnerable seniors", access: "Distance to a cool space",
   pct_65_plus: "Share aged 65+", pop_65_plus: "Number aged 65+", pct_1_2_room: "Share in 1–2 room flats",
   pa_pct_one_person: "One-person households", pa_pct_difficulty: "Daily-activity difficulty",
@@ -19,7 +20,8 @@ const GLOSSARY = [
   ["WBGT", "Wet Bulb Globe Temperature (°C): NEA's heat-stress measure. It combines air temperature, humidity, sunshine and wind — how hot it feels to the body."],
   ["Heat-stress level", "NEA bands: Low (below 31°C), Moderate (31–32.9°C), High (33°C and above)."],
   ["Afternoon peak", "The highest WBGT between 12 pm and 6 pm — the most dangerous time for seniors outdoors."],
-  ["High-heat alert", "HeatGuard's model sees a meaningful chance of High heat tomorrow, even if the typical forecast is Moderate. Plan as for a High day."],
+  ["High heat possible", "HeatGuard's model sees a meaningful chance of High heat tomorrow (15% or more), even if the typical forecast is Moderate."],
+  ["Start here / Check in / Routine", "Start here: the 10 highest-risk areas where Moderate or High heat is forecast. Check in: other highly exposed areas with Moderate-or-worse heat. Routine: everything else."],
   ["PSI", "Pollutant Standards Index (24-hour), NEA's haze measure. Good ≤ 50, Moderate 51–100, Unhealthy 101–200, Very unhealthy 201–300, Hazardous above 300."],
   ["Subzone / planning area", "URA's map units. A planning area (e.g. Bukit Merah) contains several subzones (e.g. Telok Blangah Rise)."],
   ["Cool space", "A free, air-conditioned public place seniors can go to: Community Clubs and public libraries."],
@@ -47,15 +49,15 @@ export default function AboutPage() {
 
         {q.isPending ? <PageSkeleton rows={1} /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} title="Couldn't load the score weights" /> : (
           <>
-            <div className="grid gap-5 lg:grid-cols-2">
-              {[["risk_score", "Risk score (0–100)", "How each area is ranked"], ["vulnerability_score", "Vulnerability", "Part of the risk score: compared with all areas that have at least 50 seniors"]].map(([key, t, sub]) => (
+            <div className="grid gap-5 lg:grid-cols-3">
+              {[["hazard", "Hazard (0–1): how dangerous the day is", "From the forecast model, plus haze"], ["exposure", "Exposure (0–1): who would be affected", "Risk score = 100 × hazard × exposure"], ["vulnerability_score", "Vulnerability (part of exposure)", "Compared with all areas that have at least 50 seniors"]].map(([key, t, sub]) => (
                 <Card key={key}>
                   <CardTitle icon={<Scale className="h-4 w-4" />} title={t} subtitle={sub} />
                   <div className="space-y-3">
                     {q.data.weights.filter((w) => w.score === key).map((w) => (
                       <div key={w.component}>
                         <div className="flex items-baseline justify-between gap-3"><span className="text-sm font-medium text-ink-900">{NAMES[w.component] ?? w.component}</span><span className="text-sm font-semibold tabular-nums text-brand-700">{pct(w.weight)}</span></div>
-                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-brand-500" style={{ width: `${w.weight * 100 / 0.35}%` }} /></div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, w.weight * 100)}%` }} /></div>
                         <p className="mt-1 text-[13px] text-ink-500">{w.description}</p>
                       </div>
                     ))}

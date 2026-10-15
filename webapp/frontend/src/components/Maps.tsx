@@ -2,7 +2,7 @@ import "leaflet/dist/leaflet.css";
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMap } from "react-leaflet";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import type { CheckinRow, CoolSpace, StationLatest } from "../lib/api";
+import type { CheckinRow, CoolSpace, ReplayRow, StationLatest } from "../lib/api";
 import { deg, title } from "../lib/format";
 import { BAND, riskHex } from "../lib/theme";
 
@@ -69,6 +69,37 @@ export function StationMap({ stations, height = 460 }: { stations: StationLatest
                 <div className="text-ink-500">{s.town_center}</div>
                 <div className="mt-1">Now {deg(s.wbgt_c)} ({s.heat_band}) at {s.latest_time_sgt}</div>
                 <div>Today's peak so far {deg(s.peak_so_far_today_c)}</div>
+              </div>
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
+    </Base>
+  );
+}
+
+export function ReplayMap({ rows, height = 520 }: { rows: ReplayRow[]; height?: number }) {
+  const navigate = useNavigate();
+  const ordered = [...rows].sort((a, b) => Number(a.actually_high) - Number(b.actually_high) || (b.rank - a.rank));
+  return (
+    <Base height={height}>
+      {ordered.map((r) => {
+        const top = r.tier === "Start here", census = r.census_rank <= 10;
+        return (
+          <CircleMarker key={r.subzone_name} center={[r.centroid_latitude, r.centroid_longitude]}
+            radius={top || census ? 9 : 5}
+            pathOptions={{
+              color: top ? "#EA580C" : census ? "#7C3AED" : "#FFFFFF", weight: top || census ? 3 : 1,
+              fillColor: r.actually_high ? "#DC2626" : "#94A3B8", fillOpacity: r.actually_high ? 0.85 : 0.35,
+            }}
+            eventHandlers={{ click: () => navigate(`/area/${encodeURIComponent(r.subzone_name)}`) }}>
+            <Tooltip direction="top" offset={[0, -6]}>
+              <div className="text-[13px]">
+                <div className="font-semibold">{title(r.subzone_name)}</div>
+                <div className="text-ink-500">{title(r.planning_area)}</div>
+                <div className="mt-1">{top ? `HeatGuard top 10 (#${r.rank})` : `HeatGuard #${r.rank}`}{census ? ` · Census-only top 10 (#${r.census_rank})` : ""}</div>
+                <div>Forecast {deg(r.heat_wbgt_c)} · chance of High {Math.round(r.prob_high * 100)}%</div>
+                <div className={r.actually_high ? "font-semibold text-red-700" : "text-ink-500"}>Actual nearby peak {deg(r.actual_peak_nearest_c)}{r.actually_high ? " — High" : ""}</div>
               </div>
             </Tooltip>
           </CircleMarker>
