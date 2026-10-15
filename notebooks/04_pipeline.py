@@ -75,8 +75,9 @@ P_HIGH_FULL = 0.5                 # a 50% chance of High heat counts as the full
 HAZE_IN_HAZARD = 0.3              # haze adds up to 0.3 to the hazard (nothing at PSI 50, full at PSI 200)
 OBSERVED_HAZARD = {"High": 0.9, "Moderate": 0.45, "Low": 0.15}   # heat hazard used only when no forecast exists
 EXPOSURE_WEIGHTS = {"vulnerability": 0.7, "access": 0.3}
-CHECKIN_EXPOSURE_PCTL = 0.75      # 'Check in' = Moderate heat in the top quarter of areas by exposure
-TIERS = {"Act": 1, "Check in": 2, "Routine": 3}
+PRIORITY_AREAS = 10               # 'Start here' = the 10 highest-risk areas where Moderate or High heat is forecast (outreach capacity is limited)
+CHECKIN_EXPOSURE_PCTL = 0.75      # 'Check in' = Moderate-or-worse heat in the most exposed quarter of areas
+TIERS = {"Start here": 1, "Check in": 2, "Routine": 3}
 
 SCORE_WEIGHTS = [   # published to gold_score_weights for the app and Genie
     ("hazard", "p_moderate_plus", 0.5, "Chance tomorrow's afternoon peak reaches Moderate heat stress (WBGT 31 °C or more), from the forecast model"),
@@ -815,12 +816,19 @@ def gold_rulebook():
 # MAGIC
 # MAGIC On a cool day every area scores low; on a hot day the most exposed areas rise to the top. The forecast now drives the list.
 # MAGIC
-# MAGIC **Priority tiers** — what a coordinator actually needs to know:
+# MAGIC **Priority tiers** — built around limited outreach capacity:
 # MAGIC | Tier | Rule | Action (from the rulebook) |
 # MAGIC |---|---|---|
-# MAGIC | **Act** | High heat forecast, or High-heat alert (a meaningful chance of High) | High-heat action: call or visit before 11 am |
-# MAGIC | **Check in** | Moderate heat forecast **and** among the most exposed quarter of areas | Moderate-heat action: phone check-in |
+# MAGIC | **Start here** | The **10 highest-risk areas** where Moderate or High heat is forecast | High-heat action: call or visit before 11 am |
+# MAGIC | **Check in** | Other areas with Moderate-or-worse heat (or Very unhealthy haze) **and** among the most exposed quarter of areas | Moderate-heat action: phone check-in |
 # MAGIC | **Routine** | Everything else | Routine check-ins |
+# MAGIC
+# MAGIC **Why a fixed "top 10" instead of a red alert for every area that might hit High:** the replay below showed that High heat reaches at
+# MAGIC least one area on about two days in three in the hot season, and that no threshold lets the forecast say *exactly* which areas will hit High
+# MAGIC with better than about 1-in-3 precision. What the forecast *does* do well is **rank**: on the test days, HeatGuard's top 10 areas actually
+# MAGIC reached High heat about twice as often as the top 10 by Census vulnerability alone. So the list tells coordinators where to spend limited
+# MAGIC time first, rather than raising alarms it can't back up. The **High-heat alert** badge (chance of High ≥ the model's threshold) is still shown
+# MAGIC on each area as extra information.
 # MAGIC
 # MAGIC Haze actions are added whenever the area's PSI is Unhealthy or worse. Within each tier, areas are ordered by risk score.
 
@@ -851,11 +859,15 @@ def score_and_tier(df, partition=()):
             .withColumn("exposure_pctl", F.round(F.percent_rank().over(W.partitionBy(*partition).orderBy("exposure")), 4))
             .withColumn("risk_score", F.round(100 * F.col("hazard") * F.col("exposure"), 1)))
     severe_haze = F.col("psi_band").isin("Very unhealthy", "Hazardous")
-    df = (df.withColumn("tier", F.when(F.col("action_band") == "High", "Act")
-                                 .when(((F.col("action_band") == "Moderate") | severe_haze) & (F.col("exposure_pctl") >= CHECKIN_EXPOSURE_PCTL), "Check in")
+    eligible = F.col("action_band").isin("Moderate", "High")
+    df = (df.withColumn("_eligible", eligible.cast("int"))
+            .withColumn("_prio", F.row_number().over(W.partitionBy(*partition).orderBy(F.col("_eligible").desc(), F.col("risk_score").desc_nulls_last())))
+            .withColumn("tier", F.when(eligible & (F.col("_prio") <= PRIORITY_AREAS), "Start here")
+                                 .when((eligible | severe_haze) & (F.col("exposure_pctl") >= CHECKIN_EXPOSURE_PCTL), "Check in")
                                  .otherwise("Routine"))
+            .drop("_eligible", "_prio")
             .withColumn("tier_order", F.create_map(*[x for k, v in TIERS.items() for x in (F.lit(k), F.lit(v))])[F.col("tier")])
-            .withColumn("main_driver", F.when(F.col("tier") == "Act", "heat")
+            .withColumn("main_driver", F.when((F.col("action_band") == "High") | (F.col("heat_hazard") >= 0.6), "heat")
                                         .when(F.col("haze_hazard") > F.col("heat_hazard"), "haze")
                                         .when(EXPOSURE_WEIGHTS["access"] * F.col("access_component") > EXPOSURE_WEIGHTS["vulnerability"] * F.col("vulnerability_score"), "access")
                                         .otherwise("vulnerability"))
@@ -878,7 +890,7 @@ def score_and_tier(df, partition=()):
 
 # COMMAND ----------
 
-@dlt.table(comment="Ranked check-in list: in-scope subzones (≥ 50 residents aged 65+) with tier (Act / Check in / Routine), risk score = 100 × hazard × exposure, "
+@dlt.table(comment="Ranked check-in list: in-scope subzones (≥ 50 residents aged 65+) with tier (Start here = top 10 / Check in / Routine), risk score = 100 × hazard × exposure, "
                    "the reason and the rulebook action. Heat basis: tomorrow's model forecast when available, otherwise the latest observed afternoon peak.")
 @dlt.expect("has_heat", "heat_band IS NOT NULL")
 def gold_checkin_list():
@@ -911,7 +923,7 @@ def gold_checkin_list():
         F.concat(F.lit("Nearest cool space: "), F.col("nearest_cool_space"), F.lit(" ("), F.col("cool_space_km").cast("string"), F.lit(" km)")),
         F.concat(F.lit("Haze: PSI "), F.col("psi_twenty_four_hourly").cast("int").cast("string"), F.lit(" ("), F.col("psi_band"), F.lit(")"))))
 
-    df = (df.withColumn("rule_level", F.when(F.col("tier") == "Act", "High").when(F.col("tier") == "Check in", "Moderate").otherwise("Low"))
+    df = (df.withColumn("rule_level", F.when(F.col("tier") == "Start here", "High").when(F.col("tier") == "Check in", "Moderate").otherwise("Low"))
             .join(heat_rules, "rule_level", "left").join(haze_rules, "psi_band", "left")
             .withColumn("action", F.concat_ws(" ", "heat_action", "haze_action")))
     return df.select(
@@ -933,37 +945,40 @@ def gold_checkin_list():
 # MAGIC %md
 # MAGIC ## Gold: the day outlook (one line for the coordinator)
 # MAGIC
-# MAGIC **What it does:** sums the list up into the single message a coordinator needs first — *is tomorrow a day to act, and for how many seniors?*
+# MAGIC **What it does:** sums the list up into the first thing a coordinator reads.
 # MAGIC
-# MAGIC | Level | When | Headline |
+# MAGIC | Level | When | Example headline |
 # MAGIC |---|---|---|
-# MAGIC | **High-heat risk** | at least one area in **Act** | "High-heat risk on Thu 15 Oct in 3 areas — 4,430 seniors…" |
-# MAGIC | **Take care** | no Act areas, at least one **Check in** area | "Moderate heat on … check in on N high-exposure areas" |
-# MAGIC | **Normal** | neither | "No heat risk … routine check-ins only" |
+# MAGIC | **High heat possible** | any area forecast High, or with a meaningful chance of High (High-heat alert) | "High heat possible in parts of Singapore on Thu 15 Oct. Start with these 10 areas — 41,230 seniors aged 65+." |
+# MAGIC | **Moderate heat** | Moderate heat forecast somewhere, no High | "Moderate heat on … Start with these 10 areas …" |
+# MAGIC | **Low heat** | neither | "Low heat stress on … Routine check-ins only." |
+# MAGIC
+# MAGIC The wording says *possible*, not *certain*: the replay showed the forecast ranks areas well but cannot reliably say how hot the whole island will be.
 
 # COMMAND ----------
 
-@dlt.table(comment="Day outlook: one row summarising the check-in list — level (High-heat risk / Take care / Normal), headline, and the number of areas and seniors in each tier.")
+@dlt.table(comment="Day outlook: one row summarising the check-in list — level (High heat possible / Moderate heat / Low heat), headline, the 'Start here' areas and seniors, and counts per tier.")
 def gold_day_outlook():
     df = spark.read.table("gold_checkin_list")
+    top_names = F.array_join(F.slice(F.transform(F.array_sort(F.collect_list(F.when(F.col("tier") == "Start here", F.struct("rank", "subzone_name")))),
+                                                 lambda x: F.initcap(x["subzone_name"])), 1, 3), ", ")
     agg = df.agg(
         F.max("for_date").alias("for_date"), F.max("heat_basis").alias("heat_basis"), F.max(F.col("heat_is_forecast").cast("int")).cast("boolean").alias("is_forecast"),
         F.count("*").alias("total_areas"), F.sum("pop_65_plus").alias("total_seniors"),
-        *[x for t in TIERS for x in (F.count(F.when(F.col("tier") == t, True)).alias(f"{t.lower().replace(' ', '')}_areas"),
-                                    F.coalesce(F.sum(F.when(F.col("tier") == t, F.col("pop_65_plus"))), F.lit(0)).alias(f"{t.lower().replace(' ', '')}_seniors"))],
+        *[x for t in TIERS for x in (F.count(F.when(F.col("tier") == t, True)).alias(f"{t.lower().replace(' ', '_')}_areas"),
+                                    F.coalesce(F.sum(F.when(F.col("tier") == t, F.col("pop_65_plus"))), F.lit(0)).alias(f"{t.lower().replace(' ', '_')}_seniors"))],
+        F.count(F.when(F.col("high_alert") | (F.col("heat_band") == "High"), True)).alias("high_alert_areas"),
+        F.count(F.when(F.col("heat_band") == "Moderate", True)).alias("moderate_areas"),
         F.round(F.max("prob_high"), 3).alias("max_prob_high"), F.round(F.max("heat_wbgt_c"), 1).alias("hottest_heat_c"),
-        F.max("psi_twenty_four_hourly").alias("worst_psi"), F.max_by("psi_band", "psi_twenty_four_hourly").alias("worst_psi_band"))
+        F.max("psi_twenty_four_hourly").alias("worst_psi"), F.max_by("psi_band", "psi_twenty_four_hourly").alias("worst_psi_band"),
+        top_names.alias("top_areas"))
     day = F.date_format("for_date", "EEE d MMM")
-    plural = lambda n, word: F.concat(F.col(n).cast("string"), F.lit(f" {word}"), F.when(F.col(n) == 1, F.lit("")).otherwise(F.lit("s")))
+    start = F.concat(F.lit(" Start with these "), F.col("start_here_areas").cast("string"), F.lit(" areas — "), F.format_number("start_here_seniors", 0), F.lit(" seniors aged 65+."))
     return (agg
-        .withColumn("level", F.when(F.col("act_areas") > 0, "High-heat risk").when(F.col("checkin_areas") > 0, "Take care").otherwise("Normal"))
-        .withColumn("headline", F.when(F.col("act_areas") > 0, F.concat(
-                F.lit("High-heat risk on "), day, F.lit(" in "), plural("act_areas", "area"), F.lit(" — "), F.format_number("act_seniors", 0),
-                F.lit(" seniors aged 65+ live there. Call or visit them before 11 am.")))
-            .when(F.col("checkin_areas") > 0, F.concat(
-                F.lit("Moderate heat on "), day, F.lit(". Check in on "), plural("checkin_areas", "high-exposure area"), F.lit(" ("),
-                F.format_number("checkin_seniors", 0), F.lit(" seniors aged 65+).")))
-            .otherwise(F.concat(F.lit("No heat risk on "), day, F.lit(". Routine check-ins only.")))))
+        .withColumn("level", F.when(F.col("high_alert_areas") > 0, "High heat possible").when(F.col("moderate_areas") > 0, "Moderate heat").otherwise("Low heat"))
+        .withColumn("headline", F.when(F.col("high_alert_areas") > 0, F.concat(F.lit("High heat possible in parts of Singapore on "), day, F.lit("."), start))
+                                 .when(F.col("moderate_areas") > 0, F.concat(F.lit("Moderate heat on "), day, F.lit("."), start))
+                                 .otherwise(F.concat(F.lit("Low heat stress on "), day, F.lit(". Routine check-ins only.")))))
 
 # COMMAND ----------
 
@@ -1012,20 +1027,24 @@ def gold_replay_list():
                       "heat_wbgt_c", "heat_band", "prob_moderate_plus", "prob_high", "high_alert", "psi_twenty_four_hourly", "psi_band",
                       "actual_peak_nearest_c", "actual_band_nearest", "actually_high", "centroid_latitude", "centroid_longitude"))
 
-@dlt.table(comment="Replay summary per test-period day: areas and seniors in Act / Check in, areas whose nearest station actually reached High heat, and how many of those HeatGuard put in Act or Check in the evening before.")
+@dlt.table(comment="Replay summary per test-period day: 'Start here' and 'Check in' areas, areas whose nearest station actually reached High heat, "
+                   "how many of HeatGuard's top 10 actually reached High, and the same for a Census-only top 10 (the comparison that shows what the forecast adds).")
 def gold_replay_summary():
-    r = spark.read.table("gold_replay_list")
-    flagged = F.col("tier").isin("Act", "Check in")
+    r = (spark.read.table("gold_replay_list")
+         .withColumn("census_rank", F.row_number().over(W.partitionBy("target_date").orderBy(F.col("exposure").desc()))))
+    start = F.col("tier") == "Start here"
+    census = F.col("census_rank") <= PRIORITY_AREAS
     return (r.groupBy("target_date").agg(
                 F.count("*").alias("areas"),
-                F.count(F.when(F.col("tier") == "Act", True)).alias("act_areas"),
-                F.coalesce(F.sum(F.when(F.col("tier") == "Act", F.col("pop_65_plus"))), F.lit(0)).alias("act_seniors"),
+                F.count(F.when(start, True)).alias("start_here_areas"),
+                F.coalesce(F.sum(F.when(start, F.col("pop_65_plus"))), F.lit(0)).alias("start_here_seniors"),
                 F.count(F.when(F.col("tier") == "Check in", True)).alias("checkin_areas"),
                 F.count(F.when(F.col("actually_high"), True)).alias("high_areas"),
                 F.coalesce(F.sum(F.when(F.col("actually_high"), F.col("pop_65_plus"))), F.lit(0)).alias("high_seniors"),
-                F.count(F.when(F.col("actually_high") & (F.col("tier") == "Act"), True)).alias("high_areas_in_act"),
-                F.count(F.when(F.col("actually_high") & flagged, True)).alias("high_areas_flagged"),
-                F.coalesce(F.sum(F.when(F.col("actually_high") & flagged, F.col("pop_65_plus"))), F.lit(0)).alias("high_seniors_flagged"),
+                F.count(F.when(F.col("actually_high") & start, True)).alias("start_here_hits"),
+                F.coalesce(F.sum(F.when(F.col("actually_high") & start, F.col("pop_65_plus"))), F.lit(0)).alias("start_here_seniors_hit"),
+                F.count(F.when(F.col("actually_high") & census, True)).alias("census_top10_hits"),
+                F.count(F.when(F.col("actually_high") & F.col("tier").isin("Start here", "Check in"), True)).alias("high_areas_flagged"),
                 F.round(F.max("actual_peak_nearest_c"), 1).alias("hottest_actual_c"))
             .withColumn("share_high_areas_flagged", F.round(F.col("high_areas_flagged") / F.col("high_areas"), 3)))
 
