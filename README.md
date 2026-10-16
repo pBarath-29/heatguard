@@ -20,6 +20,7 @@ Student hackathon: build on **Databricks Free Edition** using Singapore open dat
 | **Pipeline** bronze → silver → gold with data-quality expectations | [notebooks/04_pipeline.py](notebooks/04_pipeline.py) · pipeline `heatguard-pipeline` |
 | **Forecast model** (tomorrow's afternoon peak WBGT + chance of High heat) in MLflow / Unity Catalog | [notebooks/05_forecast_model.py](notebooks/05_forecast_model.py) · `workspace.heatguard.wbgt_peak_forecaster@champion` |
 | **Daily job** at 6:45 pm SGT: refresh data → pipeline → forecast → pipeline | `heatguard-daily` |
+| **Keep-alive job**: restarts both apps at 5:30 am, checks again at 5:30 pm, so the links stay live on Free Edition | `heatguard-keep-apps-on` · [notebooks/07_keep_apps_running.py](notebooks/07_keep_apps_running.py) |
 | **Genie space** "HeatGuard: ask about heat risk" | [genie/create_genie_space.py](genie/create_genie_space.py) |
 | Ingestion: setup, live 15-min job (paused), backfill, static data | [notebooks/00–03](notebooks/) |
 
