@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, Send, Snowflake, Sun, ThermometerSun, Wind,
+  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, Send, Snowflake, Sun, ThermometerSun,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, ErrorState, inputClass, Segmented, Skeleton } from "../components/ui";
 import { ApiError, api, type CheckinRow, type NearResponse } from "../lib/api";
-import { dayLabel, deg, num, pct, title } from "../lib/format";
+import { dayLabel, num, pct, title } from "../lib/format";
 
 // ---------- remembered on this device only ----------
 const CENTRE_KEY = "heatguard.centrePostal";
@@ -60,7 +60,6 @@ function Welcome({ onSet }: { onSet: (postal: string) => void }) {
         <button type="button" onClick={() => onSet("098917")} className="mt-3 text-sm font-medium text-brand-700 hover:text-brand-800">Just looking? Try an example centre (Radin Mas CC)</button>
         <p className="mt-4 text-xs text-ink-400">Remembered on this device only. HeatGuard uses area-level open data — no personal information.</p>
       </form>
-      <p className="mt-6 text-sm text-ink-500">Planning for many areas? <Link to="/planner" className="font-medium text-brand-700 hover:text-brand-800">See the Singapore-wide list →</Link></p>
     </div>
   );
 }
@@ -180,14 +179,13 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
           </div>
           {plan.haze && <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-[15px]"><CloudFog className="h-5 w-5" />{plan.haze.text}</div>}
           <button onClick={() => setDetails(!details)} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-white/85 hover:text-white">
-            {details ? "Hide details" : "More details"} <ChevronDown className={clsx("h-4 w-4 transition", details && "rotate-180")} />
+            {details ? "Hide" : "How sure is this?"} <ChevronDown className={clsx("h-4 w-4 transition", details && "rotate-180")} />
           </button>
           {details && point && (
-            <div className="mt-3 grid gap-2 rounded-2xl bg-black/15 p-4 text-sm text-white/90 sm:grid-cols-3">
-              <div><div className="text-white/70">Afternoon heat stress</div><div className="text-lg font-semibold">{deg(point.heat_wbgt_c)} WBGT</div></div>
-              <div><div className="text-white/70">Chance of high heat stress</div><div className="text-lg font-semibold">{pct(point.prob_high)}</div></div>
-              <div><div className="text-white/70">Measured near</div><div className="font-medium">{point.stations[0]?.name} ({point.stations[0]?.distance_km} km)</div></div>
-              <p className="text-xs text-white/70 sm:col-span-3">WBGT is NEA's heat-stress measure (temperature, humidity, sun and wind). Moderate from 31 °C, high from 33 °C.</p>
+            <div className="mt-3 space-y-2 rounded-2xl bg-black/15 p-4 text-[15px] text-white/95">
+              <p><b>How sure is this?</b> The chance of a very hot afternoon near your centre is about {pct(point.prob_high)}{point.prob_high >= 0.1 ? ` (around 1 in ${Math.max(2, Math.round(1 / point.prob_high))})` : ""}.</p>
+              <p>Based on NEA's weather stations nearest your centre ({point.stations[0]?.name}, {point.stations[0]?.distance_km} km away) and NEA's forecast.</p>
+              <p className="text-sm text-white/75">HeatGuard gives an early warning so you can plan; on the day, always follow NEA's latest advisories.</p>
             </div>
           )}
         </div>
@@ -235,10 +233,7 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
         </section>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-4 text-sm text-ink-500">
-        <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {place.address}</span>
-        <Link to="/planner" className="inline-flex items-center gap-1 font-medium text-brand-700 hover:text-brand-800"><Wind className="h-4 w-4" /> Singapore-wide list</Link>
-      </div>
+      <div className="flex items-center gap-1.5 px-1 pb-2 text-sm text-ink-500"><MapPin className="h-4 w-4 shrink-0" /> {title(place.address)}</div>
     </div>
   );
 }

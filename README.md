@@ -15,7 +15,7 @@ Student hackathon: build on **Databricks Free Edition** using Singapore open dat
 ## What's built (as of 14 Oct 2026)
 | Piece | Where |
 |---|---|
-| **Website** for coordinators (FastAPI + React): check-in list, Why here?, heat & haze now, Genie chat, forecast accuracy, message writer | [webapp/](webapp/) · https://heatguard-web-7474645045833960.aws.databricksapps.com |
+| **Website** for Active Ageing Centre coordinators (FastAPI + React): *My plan* (plain-words outlook, to-do list, WhatsApp-ready message in 4 languages, nearby areas, nearest cool place), simple area pages, and *Ask a question* (Genie) | [webapp/](webapp/) · https://heatguard-web-7474645045833960.aws.databricksapps.com |
 | **Pipeline** bronze → silver → gold with data-quality expectations | [notebooks/04_pipeline.py](notebooks/04_pipeline.py) · pipeline `heatguard-pipeline` |
 | **Forecast model** (tomorrow's afternoon peak WBGT + chance of High heat) in MLflow / Unity Catalog | [notebooks/05_forecast_model.py](notebooks/05_forecast_model.py) · `workspace.heatguard.wbgt_peak_forecaster@champion` |
 | **Daily job** at 6:45 pm SGT: refresh data → pipeline → forecast → pipeline | `heatguard-daily` |

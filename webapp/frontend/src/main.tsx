@@ -6,14 +6,9 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import { EmptyState } from "./components/ui";
-import AboutPage from "./pages/AboutPage";
-import AccuracyPage from "./pages/AccuracyPage";
 import AreaPage from "./pages/AreaPage";
 import AskPage from "./pages/AskPage";
-import CheckinPage from "./pages/CheckinPage";
 import HomePage from "./pages/HomePage";
-import NowPage from "./pages/NowPage";
-import ProofPage from "./pages/ProofPage";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1, refetchOnWindowFocus: false } },
@@ -26,14 +21,9 @@ createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
-            <Route path="planner" element={<CheckinPage />} />
             <Route path="area/:name" element={<AreaPage />} />
-            <Route path="now" element={<NowPage />} />
-            <Route path="my-centre" element={<Navigate to="/" replace />} />
-            <Route path="proof" element={<ProofPage />} />
             <Route path="ask" element={<AskPage />} />
-            <Route path="accuracy" element={<AccuracyPage />} />
-            <Route path="about" element={<AboutPage />} />
+            {["planner", "now", "my-centre", "proof", "accuracy", "about"].map((p) => <Route key={p} path={p} element={<Navigate to="/" replace />} />)}
             <Route path="*" element={<EmptyState title="Page not found" body="That page doesn't exist." action={<Link className="text-sm font-medium text-brand-700" to="/">Go to my plan</Link>} />} />
           </Route>
         </Routes>

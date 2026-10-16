@@ -102,7 +102,7 @@ export interface StationWeight { station_id: string; station_name: string; stati
 export interface StationPeak { station_id: string; station_name: string; date_sgt: string; afternoon_peak_wbgt_c: number }
 export interface StationForecast { station_id: string; station_name: string; target_date: string; predicted_peak_wbgt_c: number; prob_high: number }
 export interface ScoreWeight { score: string; component: string; weight: number; description: string }
-export interface AreaResponse { row: CheckinRow; total_areas: number; stations: StationWeight[]; peaks: StationPeak[]; forecasts: StationForecast[]; weights: ScoreWeight[] }
+export interface AreaResponse { row: CheckinRow }
 
 export interface StationLatest {
   station_id: string; station_name: string; town_center: string; latitude: number; longitude: number;
@@ -167,19 +167,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  checkin: () => request<CheckinResponse>("/api/checkin"),
   area: (name: string) => request<AreaResponse>(`/api/area/${encodeURIComponent(name)}`),
-  now: () => request<NowResponse>("/api/now"),
-  accuracy: () => request<AccuracyResponse>("/api/accuracy"),
-  about: () => request<AboutResponse>("/api/about"),
-  coolSpaces: () => request<CoolSpace[]>("/api/cool-spaces"),
   messageOptions: () => request<MessageOptions>("/api/message/options"),
   message: (subzone: string, language: string, audience: string, centre?: string) =>
     request<{ text: string; used_ai: boolean }>("/api/message", { method: "POST", body: JSON.stringify({ subzone, language, audience, centre: centre ?? null }) }),
   genie: (question: string, conversation_id?: string | null) =>
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
-  refresh: () => request<{ ok: boolean }>("/api/refresh", { method: "POST" }),
-  replay: () => request<ReplaySummary>("/api/replay"),
-  replayDay: (day: string) => request<{ day: string; rows: ReplayRow[] }>(`/api/replay/${day}`),
   near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
 };

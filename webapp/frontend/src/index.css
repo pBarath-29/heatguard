@@ -7,18 +7,3 @@
   body { font-feature-settings: "cv11", "ss01"; }
   ::selection { background: #FED7AA; }
 }
-
-/* Leaflet tooltips styled to match the app */
-.leaflet-tooltip {
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.25);
-  padding: 8px 10px;
-  font-family: "Inter Variable", system-ui, sans-serif;
-  color: #0F172A;
-}
-.leaflet-container { font-family: "Inter Variable", system-ui, sans-serif; background: #F1F5F9; }
-.leaflet-control-attribution { font-size: 10px; }
-
-/* Recharts: no focus outline on click */
-.recharts-wrapper *:focus { outline: none; }

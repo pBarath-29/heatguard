@@ -53,14 +53,14 @@ export default function MessageDialog({ row, onClose }: { row: CheckinRow; onClo
           </div>
           <div className="flex items-start gap-2 rounded-xl bg-ink-50 px-3.5 py-3 text-[13px] text-ink-600">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
-            The message only uses actions from HeatGuard's rulebook. The AI rewrites the wording and translates; it never adds new advice.
+            The message only includes HeatGuard's standard safety steps, written warmly and translated for you.
           </div>
           {mutation.isError && (
             <Banner tone="warning">{mutation.error instanceof ApiError ? mutation.error.message : "Couldn't write the message. Please try again."}</Banner>
           )}
           {mutation.data && (
             <div className="space-y-2">
-              {!mutation.data.used_ai && <Banner tone="info">The writing assistant isn't available right now, so here is the plain rulebook text. You can still copy and send it.</Banner>}
+              {!mutation.data.used_ai && <Banner tone="info">The writing assistant is busy right now, so here is the plain version. You can still copy and send it.</Banner>}
               <div className="relative rounded-2xl border border-ink-200 bg-white">
                 <pre className="max-h-72 overflow-auto whitespace-pre-wrap px-4 py-4 pr-24 font-sans text-[15px] leading-relaxed text-ink-800">{mutation.data.text}</pre>
                 <Button size="sm" className={clsx("absolute right-3 top-3", copied && "border-emerald-300 text-emerald-700")} icon={copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} onClick={copy}>
