@@ -4,7 +4,7 @@
 # environment_version = "6"
 # ///
 # MAGIC %md
-# MAGIC # 07 · Keep the HeatGuard apps running
+# MAGIC # 07 · Keep the HeatGuard website running
 # MAGIC
 # MAGIC **Why this exists:** on Databricks Free Edition, apps stop automatically after about 24 hours. When that happens the HeatGuard
 # MAGIC website links show "app unavailable" until someone presses **Start**. This notebook is run by the job **`heatguard-keep-apps-on`**
@@ -29,7 +29,7 @@
 import datetime
 from databricks.sdk import WorkspaceClient
 
-APPS = ["heatguard-web", "heatguard"]
+APPS = ["heatguard-web"]
 dbutils.widgets.text("mode", "auto", "auto / restart / ensure")
 mode = dbutils.widgets.get("mode").strip() or "auto"
 hour_sgt = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).hour

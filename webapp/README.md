@@ -1,6 +1,6 @@
 # HeatGuard web app (FastAPI + React, Databricks App `heatguard-web`)
 
-The main, polished HeatGuard website. The Streamlit app in [../app](../app) is kept as a backup.
+The HeatGuard website — the project's only app.
 
 ## How it's built
 
