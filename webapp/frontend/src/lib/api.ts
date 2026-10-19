@@ -94,7 +94,8 @@ export interface NearResponse {
 }
 export interface CentrePlan {
   for_date: string | null; level: "very_hot" | "hot" | "normal"; title: string; subtitle: string;
-  haze: { band: string; text: string } | null; todo: { id: string; when: string; text: string }[];
+  haze: { band: string; text: string } | null; safety: string | null;
+  todo: { id: string; when: string; text: string; why: string | null; action: { label: string; to: string } | null }[];
   focus_areas: string[]; message_area: string | null;
 }
 

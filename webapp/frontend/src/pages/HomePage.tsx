@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, RotateCcw, Send, Share2, Snowflake, Sun, ThermometerSun,
+  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, RotateCcw, Send, Share2, Siren, Snowflake, Sun, ThermometerSun,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -65,39 +65,70 @@ function Welcome({ onSet }: { onSet: (postal: string) => void }) {
 }
 
 // ---------- the plan ----------
+export const TODO_DONE = "heatguard:todo-done";      // fired e.g. after a successful Telegram send
+
 function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) {
   const key = `heatguard.todo.${postal}.${plan.for_date}`;
   const [done, setDone] = useState<string[]>(() => { try { return JSON.parse(store.get(key) ?? "[]"); } catch { return []; } });
   useEffect(() => { store.set(key, JSON.stringify(done)); }, [key, done]);
+  useEffect(() => {
+    const on = (e: Event) => { const id = (e as CustomEvent<string>).detail; setDone((d) => (d.includes(id) ? d : [...d, id])); };
+    window.addEventListener(TODO_DONE, on);
+    return () => window.removeEventListener(TODO_DONE, on);
+  }, []);
   const toggle = (id: string) => setDone((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]));
   const count = plan.todo.filter((t) => done.includes(t.id)).length;
+  const next = plan.todo.find((t) => !done.includes(t.id));
+  const goToMessage = () => document.getElementById("message")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-ink-900">Your to-do</h2>
         <span className={clsx("rounded-full px-3 py-1 text-sm font-medium", count === plan.todo.length ? "bg-emerald-50 text-emerald-700" : "bg-ink-100 text-ink-600")}>
           {count === plan.todo.length ? "All done" : `${count} of ${plan.todo.length} done`}
         </span>
       </div>
-      <ul className="mt-4 space-y-2.5">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-100" aria-hidden>
+        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(count / plan.todo.length) * 100}%` }} />
+      </div>
+      <ol className="mt-4 space-y-2.5">
         {plan.todo.map((t) => {
-          const on = done.includes(t.id);
+          const on = done.includes(t.id), isNext = next?.id === t.id;
           return (
-            <li key={t.id}>
-              <button onClick={() => toggle(t.id)} aria-pressed={on}
-                className={clsx("flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition", on ? "border-emerald-200 bg-emerald-50/60" : "border-ink-200 hover:border-brand-300 hover:bg-brand-50/30")}>
-                <span className={clsx("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition", on ? "border-emerald-600 bg-emerald-600 text-white" : "border-ink-300 bg-surface")}>
-                  {on && <Check className="h-4 w-4" strokeWidth={3} />}
-                </span>
-                <span>
-                  <span className="block text-[13px] font-semibold uppercase tracking-wide text-brand-700">{t.when}</span>
-                  <span className={clsx("mt-0.5 block text-[16px] leading-relaxed", on ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900")}>{t.text}</span>
-                </span>
-              </button>
+            <li key={t.id} className={clsx("rounded-2xl border transition", on ? "border-emerald-200 bg-emerald-50/50" : isNext ? "border-brand-300 bg-brand-50/40" : "border-ink-200")}>
+              <div className="flex items-start gap-3 p-4">
+                <button onClick={() => toggle(t.id)} aria-pressed={on} aria-label={on ? `Mark "${t.text}" as not done` : `Mark "${t.text}" as done`}
+                  className={clsx("-m-1.5 mt-[-2px] flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition active:scale-95")}>
+                  <span className={clsx("flex h-7 w-7 items-center justify-center rounded-lg border-2 transition", on ? "border-emerald-600 bg-emerald-600 text-white" : "border-ink-300 bg-surface")}>
+                    {on && <Check className="h-4 w-4" strokeWidth={3} />}
+                  </span>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={clsx("text-[13px] font-semibold uppercase tracking-wide", on ? "text-ink-400" : "text-brand-700")}>{t.when}</span>
+                    {isNext && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">Next</span>}
+                  </div>
+                  <p className={clsx("mt-0.5 text-[16px] leading-relaxed", on ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900")}>{t.text}</p>
+                  {t.why && !on && <p className="mt-1 text-sm text-ink-500">{t.why}</p>}
+                  {t.action && !on && (t.action.to.startsWith("#") ? (
+                    <button onClick={goToMessage} className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-100 px-3 text-sm font-medium text-ink-800 hover:bg-ink-200">
+                      {t.action.label}<ArrowRight className="h-4 w-4" /></button>
+                  ) : (
+                    <Link to={t.action.to} className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-100 px-3 text-sm font-medium text-ink-800 hover:bg-ink-200">
+                      {t.action.label}<ArrowRight className="h-4 w-4" /></Link>
+                  ))}
+                </div>
+              </div>
             </li>
           );
         })}
-      </ul>
+      </ol>
+      {plan.safety && (
+        <p className="mt-4 flex items-start gap-2.5 rounded-2xl bg-red-50 p-3.5 text-sm font-medium text-red-900">
+          <Siren className="mt-0.5 h-4 w-4 shrink-0" />{plan.safety}
+        </p>
+      )}
     </section>
   );
 }
@@ -130,7 +161,7 @@ function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centr
   const ready = !!text.trim() && !q.isPending;
 
   return (
-    <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
+    <section id="message" className="scroll-mt-20 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-ink-900">Message ready to send</h2>
@@ -183,7 +214,7 @@ function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centr
         {!canSend && !t?.can_manage ? "Share opens Telegram so you can choose who gets it. " : null}
         Each language uses fixed, hand-written wording — nothing is machine-translated on the fly.
       </p>
-      {sheet && t && <TelegramSend chats={t.chats} text={text} audience={audience} language={lang} onClose={() => setSheet(false)} />}
+      {sheet && t && <TelegramSend chats={t.chats} text={text} audience={audience} language={lang} onSent={() => window.dispatchEvent(new CustomEvent(TODO_DONE, { detail: "send" }))} onClose={() => setSheet(false)} />}
     </section>
   );
 }

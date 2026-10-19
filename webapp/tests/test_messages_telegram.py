@@ -113,3 +113,50 @@ def test_not_configured_without_token(monkeypatch):
     assert tg.configured() is False
     with pytest.raises(tg.TelegramError):
         tg.send("-1", "hello")
+
+
+# ---------------- coordinator to-do ----------------
+from server import plan as pl  # noqa: E402
+
+
+def ids(level, **kw):
+    out = pl.todo(level, haze=kw.get("haze", False), focus_areas=["Telok Blangah Rise"], for_date=TOMORROW, today=kw.get("today", TODAY))
+    return [t["id"] for t in out["todo"]], out
+
+
+def test_very_hot_steps_are_in_time_order_and_reach_people_before_the_heat():
+    order, out = ids("very_hot")
+    assert order == ["send", "call", "activities", "centre", "follow_up"]
+    whens = [t["when"] for t in out["todo"]]
+    assert whens[0] == "Tonight" and "before 11 am" in whens[1] and "4 – 5 pm" in whens[-1]
+    assert "Telok Blangah Rise" in out["todo"][1]["text"] and out["safety"] and "995" in out["safety"]
+
+
+def test_no_reminder_is_scheduled_during_the_hottest_hours():
+    for level in ("very_hot", "hot"):
+        _, out = ids(level)
+        for t in out["todo"]:
+            if t["id"] in ("send", "call"):
+                assert not any(h in t["when"] for h in ("12 pm", "11 am – 4 pm", "12 – 4"))
+
+
+def test_hot_and_normal_days():
+    assert ids("hot")[0] == ["send", "call", "activities", "follow_up"]
+    order, out = ids("normal")
+    assert order == ["routine"] and out["safety"] is None
+
+
+def test_haze_adds_a_medicine_check_after_calls():
+    assert ids("hot", haze=True)[0] == ["send", "call", "haze", "activities", "follow_up"]
+
+
+def test_labels_change_when_the_plan_is_for_today():
+    _, out = ids("very_hot", today=TOMORROW)
+    assert out["todo"][0]["when"] == "Now" and out["todo"][1]["when"] == "Before 11 am"
+
+
+def test_every_step_with_a_link_points_to_a_real_page():
+    for level in ("very_hot", "hot", "normal"):
+        for t in ids(level, haze=True)[1]["todo"]:
+            if t["action"]:
+                assert t["action"]["to"].split("?")[0] in ("#message", "/welfare", "/activity")

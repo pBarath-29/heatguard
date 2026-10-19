@@ -1,4 +1,5 @@
 """HeatGuard web app: JSON API for the React frontend, plus the built frontend itself."""
+import datetime as dt
 import os
 import pathlib
 
@@ -9,7 +10,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from . import ai
+from . import ai, plan
 from .db import S, ConfigError, DataError, clear_cache, query, records, today_sgt
 
 app = FastAPI(title="HeatGuard", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -124,10 +125,8 @@ def centre_plan(point, nearby, cool, all_rows):
     """Plain-language plan for a coordinator: how hot, what to do and when (wording follows the HeatGuard rulebook)."""
     ordered = nearby.assign(_t=nearby["tier"].map(TIER_ORDER)).sort_values(["_t", "risk_score"], ascending=[True, False])
     focus = [str(n).title() for n in ordered["subzone_name"].head(2)]
-    focus_text = " and ".join(focus) if focus else "your area"
     closest = nearby.nsmallest(1, "distance_km")
     psi_band = closest["psi_band"].iloc[0] if len(closest) else None
-    cool_name = cool["name"].iloc[0] if len(cool) else "the nearest Community Club"
     for_date = all_rows["for_date"].max()
     for_date = str(for_date.date() if hasattr(for_date, "date") else for_date)[:10] if for_date is not None else None
 
@@ -138,7 +137,7 @@ def centre_plan(point, nearby, cool, all_rows):
         heat = "High" if point["heat_wbgt_c"] >= 33 else "Moderate" if point["heat_wbgt_c"] >= 31 else "Low"
         very_hot = heat == "High" or point["high_alert"]
     if very_hot:
-        level, title_, sub = "very_hot", "Very hot afternoon", "High heat stress is possible around your centre. Hottest between 12 pm and 4 pm."
+        level, title_, sub = "very_hot", "Very hot afternoon", "High heat stress is possible around your centre. Take extra care from 11 am to 4 pm."
     elif heat == "Moderate":
         level, title_, sub = "hot", "Hot afternoon", "Moderate heat stress around your centre. Hottest between 12 pm and 4 pm."
     else:
@@ -148,25 +147,10 @@ def centre_plan(point, nearby, cool, all_rows):
     if psi_band in ("Unhealthy", "Very unhealthy", "Hazardous"):
         haze = {"band": psi_band, "text": f"Haze is {psi_band.lower()}: keep windows closed and limit time outdoors."}
 
-    todo = []
-    if level == "very_hot":
-        todo = [
-            {"id": "send", "when": "Tonight", "text": "Send the heat reminder to your seniors (ready below)."},
-            {"id": "call", "when": "Before 11 am", "text": f"Call or visit seniors who live alone, starting with {focus_text}."},
-            {"id": "indoors", "when": "12 pm – 4 pm", "text": f"Remind them to stay indoors, drink water often, and come to {cool_name} if home is too hot."},
-        ]
-    elif level == "hot":
-        todo = [
-            {"id": "send", "when": "Tonight", "text": "Send the heat reminder to your seniors (ready below)."},
-            {"id": "call", "when": "Tomorrow morning", "text": f"Phone seniors who live alone, starting with {focus_text}."},
-            {"id": "indoors", "when": "12 pm – 4 pm", "text": "Remind them to avoid going out and to keep drinking water."},
-        ]
-    else:
-        todo = [{"id": "routine", "when": "Tomorrow", "text": "Routine check-ins. No extra heat steps needed."}]
-    if haze:
-        todo.append({"id": "haze", "when": "In the morning", "text": "Check that seniors with heart or lung conditions have their medication. Keep windows closed."})
+    fd = dt.date.fromisoformat(for_date) if for_date else None
+    steps = plan.todo(level, haze=haze is not None, focus_areas=focus, for_date=fd, today=today_sgt())
     lead = ordered["subzone_name"].iloc[0] if len(ordered) else None
-    return {"for_date": for_date, "level": level, "title": title_, "subtitle": sub, "haze": haze, "todo": todo,
+    return {"for_date": for_date, "level": level, "title": title_, "subtitle": sub, "haze": haze, "todo": steps["todo"], "safety": steps["safety"],
             "focus_areas": focus, "message_area": lead}
 
 

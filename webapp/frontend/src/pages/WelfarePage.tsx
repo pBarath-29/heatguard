@@ -110,7 +110,10 @@ export default function WelfarePage() {
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: features.me, staleTime: 5 * 60_000 });
   const list = useQuery({ queryKey: ["welfare"], queryFn: features.welfare, enabled: !!me.data?.can_view_welfare, refetchInterval: 60_000 });
-  const [filter, setFilter] = useState<Filter>("todo");
+  const [filter, setFilter] = useState<Filter>(() => {               // e.g. /welfare?filter=follow_up from the to-do list
+    const f = new URLSearchParams(window.location.search).get("filter");
+    return f === "follow_up" || f === "done" || f === "all" ? f : "todo";
+  });
   const [q, setQ] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});         // in memory only — never written to browser storage
   const [saving, setSaving] = useState<Record<string, string | null>>({});

@@ -8,13 +8,14 @@ import { Button } from "./ui";
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`);
 
 /** Bottom sheet (phones) / dialog (desktop): choose linked groups, send once, show what happened in each group. */
-export default function TelegramSend({ chats, text, audience, language, onClose }: {
-  chats: TelegramChat[]; text: string; audience: string; language: string; onClose: () => void;
+export default function TelegramSend({ chats, text, audience, language, onClose, onSent }: {
+  chats: TelegramChat[]; text: string; audience: string; language: string; onClose: () => void; onSent?: () => void;
 }) {
   const [picked, setPicked] = useState<string[]>(chats.map((c) => c.chat_id));
   const sendId = useRef(newId());                       // same id on retry → the server never posts twice
   const panel = useRef<HTMLDivElement>(null);
-  const m = useMutation({ mutationFn: () => features.telegramSend({ chat_ids: picked, text, audience, language, client_send_id: sendId.current }) });
+  const m = useMutation({ mutationFn: () => features.telegramSend({ chat_ids: picked, text, audience, language, client_send_id: sendId.current }),
+    onSuccess: (r) => { if (r.sent > 0 && audience === "seniors") onSent?.(); } });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !m.isPending) onClose(); };
