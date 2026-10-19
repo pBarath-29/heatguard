@@ -61,14 +61,15 @@ def friendly(error):
 _cache, _lock = {}, threading.Lock()
 
 
-def query(statement, params=None):
-    """Run SQL on the warehouse; results are cached for five minutes."""
-    key = (statement, json.dumps(params or {}, sort_keys=True))
+def query(statement, params=None, cache=True):
+    """Run SQL on the warehouse; results are cached for five minutes unless cache=False (e.g. welfare records)."""
+    key = (statement, json.dumps(params or {}, sort_keys=True, default=str))
     now = time.time()
-    with _lock:
-        hit = _cache.get(key)
-        if hit and now - hit[0] < CACHE_SECONDS:
-            return hit[1]
+    if cache:
+        with _lock:
+            hit = _cache.get(key)
+            if hit and now - hit[0] < CACHE_SECONDS:
+                return hit[1]
     from databricks import sql
     cfg = config()
     try:
@@ -78,9 +79,22 @@ def query(statement, params=None):
             df = cur.fetchall_arrow().to_pandas()
     except Exception as e:  # noqa: BLE001
         raise DataError(friendly(e), str(e)[:2000]) from e
-    with _lock:
-        _cache[key] = (now, df)
+    if cache:
+        with _lock:
+            _cache[key] = (now, df)
     return df
+
+
+def execute(statement, params=None):
+    """Run a write (INSERT) on the warehouse. Raises DataError with a safe message on failure (no data in the message)."""
+    from databricks import sql
+    cfg = config()
+    try:
+        with sql.connect(server_hostname=cfg.host, http_path=f"/sql/1.0/warehouses/{setting('DATABRICKS_WAREHOUSE_ID')}",
+                         credentials_provider=lambda: cfg.authenticate) as conn, conn.cursor() as cur:
+            cur.execute(statement, params or {})
+    except Exception as e:  # noqa: BLE001
+        raise DataError("Couldn't save right now. Your changes are still on screen — please try again.", type(e).__name__) from e
 
 
 def clear_cache():

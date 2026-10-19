@@ -27,6 +27,11 @@ async def config_error(_: Request, e: ConfigError):
     return JSONResponse(status_code=503, content={"error": str(e), "detail": ""})
 
 
+from .features import router as features_router      # noqa: E402  (Block Radar, activity check, weather, cooling places, welfare)
+
+app.include_router(features_router)
+
+
 # ---------------- data ----------------
 
 def checkin_rows():
