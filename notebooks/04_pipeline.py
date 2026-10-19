@@ -1100,7 +1100,7 @@ def gold_hdb_blocks():
                       to_int("1room_rental").alias("rental_1room"), to_int("2room_rental").alias("rental_2room"),
                       to_int("total_dwelling_units").alias("dwelling_units"), F.col("bldg_contract_town").alias("hdb_town_code")))
     sz = spark.read.table("silver_subzones").select("subzone_name", "planning_area", "geometry_geojson")
-    return (blocks.join(sz, F.expr("st_contains(st_geomfromgeojson(geometry_geojson), st_point(longitude, latitude))"))
+    return (blocks.join(sz, F.expr("st_contains(st_geomfromgeojson(geometry_geojson), st_point(longitude, latitude, 4326))"))
             .drop("geometry_geojson")
             .withColumn("rental_total", F.coalesce("rental_1room", F.lit(0)) + F.coalesce("rental_2room", F.lit(0))))
 
