@@ -62,7 +62,7 @@ def state(events: list[dict]) -> dict:
             s["follow_up"] = True
         elif a == "follow_up_off":
             s["follow_up"] = False
-        s.update(version=s["version"] + 1, updated_at=e["at"], updated_by=e.get("by"))
+        s.update(version=s["version"] + 1, updated_at=e["at"], updated_by=e.get("by_email", e.get("by")))
     s["status"] = "completed" if s["completed"] else "follow_up" if s["follow_up"] else ("unsuccessful" if s["outcome"] in FAILED_OUTCOMES else "pending")
     return s
 

@@ -33,6 +33,9 @@
 # COMMAND ----------
 
 import datetime, json, re, time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import requests
 from pyspark.sql import functions as F
 
@@ -43,7 +46,8 @@ CACHE = f"{CATALOG}.{SCHEMA}.silver_hdb_block_geocode"
 STATIC_DIR = f"/Volumes/{CATALOG}/{SCHEMA}/raw/static"
 HEADERS = {"x-api-key": dbutils.secrets.get(scope="heatguard", key="datagov_api_key")}
 ONEMAP = "https://www.onemap.gov.sg/api/common/elastic/search"
-PAUSE_S = 0.3            # ~3 requests a second, well under OneMap's published limit
+MAX_RPS = 3.5            # all threads together: ~210 requests a minute, under OneMap's published 250/min
+WORKERS = 3              # a few requests in flight at once (each takes ~0.5 s), still capped by MAX_RPS
 BATCH = 250              # write to the cache every 250 blocks, so a stopped run loses little
 
 dbutils.widgets.text("max_blocks", "0", "Max blocks to geocode this run (0 = all)")
@@ -108,8 +112,19 @@ def expand(street):
 def norm(s):
     return re.sub(r"[^A-Z0-9 ]", "", (s or "").upper().replace("SAINT", "ST")).strip()
 
+_gate, _next = threading.Lock(), [0.0]
+
+def _wait_turn():
+    """Global pace for all threads: at most MAX_RPS requests per second."""
+    with _gate:
+        now = time.monotonic()
+        t = max(now, _next[0])
+        _next[0] = t + 1 / MAX_RPS
+    time.sleep(max(0.0, t - now))
+
 def search(q, tries=4):
     for attempt in range(tries):
+        _wait_turn()
         try:
             r = requests.get(ONEMAP, params={"searchVal": q, "returnGeom": "Y", "getAddrDetails": "Y", "pageNum": 1}, timeout=20)
             if r.status_code == 429:
@@ -142,7 +157,9 @@ print(expand("BEDOK NTH AVE 4"), "|", expand("C'WEALTH DR"), "|", expand("ST. GE
 
 # MAGIC %md
 # MAGIC ## 4. Geocode residential blocks not yet in the cache → `silver_hdb_block_geocode`
-# MAGIC Progress is printed every batch. Network or OneMap errors on a block are recorded as `error` and retried on the next run.
+# MAGIC Blocks with 1- or 2-room rental flats go first (Block Radar ranks those), then the rest. A few lookups run at once, but all
+# MAGIC threads share one pace limit (`MAX_RPS`). Progress is printed every batch. Network or OneMap errors on a block are recorded as
+# MAGIC `error` and retried on the next run.
 
 # COMMAND ----------
 
@@ -152,27 +169,31 @@ spark.sql(f"""CREATE TABLE IF NOT EXISTS {CACHE} (
 COMMENT 'Cached OneMap locations for HDB residential blocks (written by 08_load_hdb_blocks). Only exact block-number + full-street matches are accepted.'""")
 
 done = spark.sql(f"SELECT blk_no, street FROM {CACHE} WHERE match_status <> 'error'")
-todo = (spark.table(BRONZE).where("residential = 'Y'").select("blk_no", "street").distinct()
-        .join(done, ["blk_no", "street"], "left_anti").toPandas())
+todo = (spark.table(BRONZE).where("residential = 'Y'")
+        .groupBy("blk_no", "street")
+        .agg(F.max(F.coalesce(F.col("1room_rental").cast("int"), F.lit(0)) + F.coalesce(F.col("2room_rental").cast("int"), F.lit(0))).alias("rental"))
+        .join(done, ["blk_no", "street"], "left_anti")
+        .orderBy(F.col("rental").desc(), "street", "blk_no").select("blk_no", "street").toPandas())
 if MAX_BLOCKS:
     todo = todo.head(MAX_BLOCKS)
 print(f"Blocks to geocode this run: {len(todo):,}")
 spark.sql(f"DELETE FROM {CACHE} WHERE match_status = 'error'")
 
 schema = "blk_no STRING, street STRING, street_full STRING, postal STRING, onemap_address STRING, latitude DOUBLE, longitude DOUBLE, match_status STRING, candidates INT, geocoded_at TIMESTAMP, source STRING"
-rows, started = [], time.time()
-for i, rec in enumerate(todo.itertuples(index=False), start=1):
+def geocode(rec):
     try:
         m = match(rec.blk_no.strip(), rec.street.strip())
     except Exception:
         m = {"match_status": "error", "candidates": 0}
-    rows.append((rec.blk_no, rec.street, m.get("street_full"), m.get("postal"), m.get("onemap_address"), m.get("latitude"), m.get("longitude"),
-                 m["match_status"], int(m.get("candidates", 0)), datetime.datetime.now(datetime.timezone.utc), "OneMap search API (SLA)"))
-    time.sleep(PAUSE_S)
-    if len(rows) >= BATCH or i == len(todo):
+    return (rec.blk_no, rec.street, m.get("street_full"), m.get("postal"), m.get("onemap_address"), m.get("latitude"), m.get("longitude"),
+            m["match_status"], int(m.get("candidates", 0)), datetime.datetime.now(datetime.timezone.utc), "OneMap search API (SLA)")
+
+recs, started = list(todo.itertuples(index=False)), time.time()
+with ThreadPoolExecutor(WORKERS) as pool:
+    for b in range(0, len(recs), BATCH):
+        rows = list(pool.map(geocode, recs[b:b + BATCH]))
         spark.createDataFrame(rows, schema).write.mode("append").saveAsTable(CACHE)
-        rows = []
-        print(f"{i:,}/{len(todo):,} done ({(time.time() - started) / 60:.1f} min)")
+        print(f"{b + len(rows):,}/{len(recs):,} done ({(time.time() - started) / 60:.1f} min)")
 
 # COMMAND ----------
 
