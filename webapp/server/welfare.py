@@ -55,7 +55,7 @@ def state(events: list[dict]) -> dict:
         if a == "complete":
             s.update(completed=True, outcome="reached")
         elif a == "uncomplete":
-            s.update(completed=False)
+            s.update(completed=False, outcome=None if s["outcome"] == "reached" else s["outcome"])
         elif a == "attempt":
             s.update(outcome=e["outcome"], follow_up=True)        # a failed attempt never completes the check
         elif a == "follow_up_on":

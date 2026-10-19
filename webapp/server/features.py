@@ -8,6 +8,7 @@ import urllib.parse
 import uuid
 from typing import Optional
 
+import pandas as pd
 import requests
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -83,7 +84,10 @@ def point_forecast(lat: float, lon: float, day: dt.date) -> dict | None:
                    WHERE f.target_date = :d""", {"d": day.isoformat()})
     if fc.empty:
         return None
-    prof = query(f"SELECT station_id, hour, offset_median_c FROM {S}.gold_station_hour_profile")
+    try:
+        prof = query(f"SELECT station_id, hour, offset_median_c FROM {S}.gold_station_hour_profile")
+    except DataError:                                                   # no daily pattern yet → peak only, no hourly estimates
+        prof = pd.DataFrame(columns=["station_id", "hour", "offset_median_c"])
     fc = fc.assign(d=[max(0.2, hr.haversine_km((lat, lon), (a, b))) for a, b in zip(fc.latitude, fc.longitude)]).nsmallest(3, "d")
     w = {r.station_id: 1 / r.d ** 2 for r in fc.itertuples()}
     tot = sum(w.values())

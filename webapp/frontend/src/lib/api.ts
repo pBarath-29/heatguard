@@ -175,3 +175,79 @@ export const api = {
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
 };
+
+// ---------------------------------------------------------------- coordinator features
+export interface Place { name: string; address: string; postal: string | null; latitude: number; longitude: number }
+export interface PointForecast {
+  date: string; peak_c: number; band: Band; prob_high: number; prob_moderate_plus: number; hourly: Record<string, number>;
+  made_on: string; model_version: string; scored_at: string | null; stations: { name: string; distance_km: number }[];
+}
+export interface NeaPeriod { start: string; end: string | null; label: string; forecast: string }
+export interface WeatherResponse {
+  today: {
+    date: string;
+    now: { wbgt: { value_c: number; band: Band; station: string; distance_km: number; time: string } | null;
+           air_temp: { value: number; station: string; distance_km: number; time: string } | null;
+           humidity: { value: number; station: string; distance_km: number; time: string } | null };
+    two_hour: { area: string; forecast: string; distance_km: number; valid_text: string; issued: string } | null;
+    observed_by_hour: { station: string; distance_km: number; by_hour: Record<string, number> } | null;
+    forecast: PointForecast | null; nea_periods: NeaPeriod[];
+  };
+  tomorrow: { date: string; forecast: PointForecast | null; nea_periods: NeaPeriod[] };
+  nea_24h: { region: string; issued: string; temp_low_c: number; temp_high_c: number; overall: string; valid_text: string } | null;
+  notes: string[]; fetched_at: string; sources: string[];
+}
+export interface ActivityInput { activity: string; exertion: "light" | "moderate" | "vigorous"; latitude: number; longitude: number; place?: string;
+  day: "today" | "tomorrow"; start: string; duration_min: number; older_adults: boolean }
+export interface CoolPlace { name: string; type: string; latitude: number; longitude: number; address: string; straight_km: number; walk_min_estimate: number;
+  opening_hours: string | null; accessibility: string | null; directions_url: string }
+export interface ActivityResult {
+  status: "Lower risk" | "Caution" | "High risk" | "Insufficient data"; activity: string; place: string | null; date: string; start: string; end: string;
+  duration_min: number; exertion: string; older_adults: boolean; reasons: string[]; precautions: string[];
+  window?: { hours: number[]; max_c: number; band: Band }; alternatives: { start: string; end: string; status: string; window_max_c: number }[];
+  shorter?: { duration_min: number; status: string } | null; indoor_options: CoolPlace[];
+  warm_nights?: { streak: number; station: string; text: string } | null; nea_periods: NeaPeriod[];
+  forecast: PointForecast | null; uncertainty?: string; sources: string[]; disclaimer: string; nea_note?: string | null;
+}
+export interface Block {
+  blk_no: string; street: string; street_full: string | null; postal: string | null; latitude: number; longitude: number; year_completed: number | null;
+  max_floor: number | null; rental_1room: number | null; rental_2room: number | null; rental_total: number; flags?: string[]; rank?: number;
+}
+export interface BlocksResponse {
+  subzone: string; planning_area: string; blocks: Block[]; total_blocks: number;
+  ranking: { top: Block[]; subzone_rental_total: number; top_rental_total: number; top_share: number | null; blocks_with_rental: number; note: string | null };
+  unplaced_in_town: { blocks: number; rental_flats: number }; centre: { latitude: number; longitude: number };
+  source: { dataset: string; loaded_at: string; locations: string }; proxy_note: string; flag_note: string;
+}
+export interface SubzoneOption { subzone_name: string; planning_area: string; blocks: number; rental_flats: number; tier: string | null; rank: number | null; distance_km?: number }
+export interface RouteResponse {
+  stops: Block[]; legs: { km: number; walk_min: number }[]; walk_min: number; visit_min: number; total_min: number; walk_km: number;
+  start: { latitude: number; longitude: number; label: string }; missing: string[];
+  timing: { status: "ok" | "too_hot" | "insufficient"; depart?: string; finish?: string; window_max_c?: number; band?: string };
+  advice: string; directions_url: string; date: string; assumptions: string;
+}
+export interface WelfareEvent { action: string; outcome: string | null; remark: string | null; by_email: string; at: string }
+export interface Resident {
+  resident_id: string; name: string; block: string; street: string; unit: string; postal: string; phone: string; notes: string; demo: boolean;
+  state: { completed: boolean; outcome: string | null; follow_up: boolean; version: number; updated_at: string | null; updated_by: string | null;
+           status: "pending" | "completed" | "follow_up" | "unsuccessful" };
+  history: WelfareEvent[];
+}
+
+export const features = {
+  locate: (q: string) => request<{ results: Place[] }>(`/api/locate?q=${encodeURIComponent(q)}`),
+  weather: (lat: number, lon: number) => request<WeatherResponse>(`/api/weather?lat=${lat}&lon=${lon}`),
+  activity: (body: ActivityInput) => request<ActivityResult>("/api/activity-check", { method: "POST", body: JSON.stringify(body) }),
+  coolPlaces: (lat: number, lon: number) => request<{ places: CoolPlace[]; heat_now: { value_c: number; band: Band; station: string } | null; coverage: string; source: string }>(`/api/cool-places?lat=${lat}&lon=${lon}`),
+  subzones: (lat?: number, lon?: number) => request<{ subzones: SubzoneOption[] }>(`/api/blocks/subzones${lat != null ? `?lat=${lat}&lon=${lon}` : ""}`),
+  blocks: (subzone: string, f: { min_rental?: number; year_from?: number; year_to?: number; min_floor?: number }) => {
+    const q = new URLSearchParams({ subzone, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v != null && !Number.isNaN(v)).map(([k, v]) => [k, String(v)])) });
+    return request<BlocksResponse>(`/api/blocks?${q}`);
+  },
+  route: (body: { subzone: string; stops: { blk_no: string; street: string }[]; start_latitude: number; start_longitude: number; start_label: string; visit_min: number; day: string }) =>
+    request<RouteResponse>("/api/blocks/route", { method: "POST", body: JSON.stringify(body) }),
+  me: () => request<{ signed_in: boolean; role: string | null; can_view_welfare: boolean }>("/api/me"),
+  welfare: () => request<{ residents: Resident[]; demo: boolean; notice: string }>("/api/welfare"),
+  welfareEvent: (id: string, body: { action: string; outcome?: string | null; remark?: string | null; expected_version: number; client_event_id: string }) =>
+    request<{ state: Resident["state"]; history?: WelfareEvent[]; duplicate?: boolean }>(`/api/welfare/${encodeURIComponent(id)}/events`, { method: "POST", body: JSON.stringify(body) }),
+};

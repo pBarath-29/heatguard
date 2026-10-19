@@ -194,13 +194,12 @@ export function ScoreRing({ score, color, size = 64, label = "risk" }: { score: 
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 flex items-center gap-1 text-[13px] font-medium text-ink-600">{label}{hint && <span title={hint} className="cursor-help text-ink-300"><Info className="h-3.5 w-3.5" /></span>}</span>
-      {children}
-    </label>
-  );
+/** A labelled form control. Use `group` when the child holds buttons (segmented choices, location picker): a <label> would
+ *  forward clicks to its first button and rename it for screen readers. */
+export function Field({ label, children, hint, group }: { label: string; children: ReactNode; hint?: string; group?: boolean }) {
+  const head = <span className="mb-1.5 flex items-center gap-1 text-[13px] font-medium text-ink-600">{label}{hint && <span title={hint} className="cursor-help text-ink-300"><Info className="h-3.5 w-3.5" /></span>}</span>;
+  if (group) return <div role="group" aria-label={label} className="block">{head}{children}</div>;
+  return <label className="block">{head}{children}</label>;
 }
 
 export const inputClass =

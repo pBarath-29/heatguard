@@ -20,7 +20,7 @@
 # MAGIC app can list blocks it could not place.
 # MAGIC
 # MAGIC **Resumable and polite:** blocks already in the cache are skipped (re-run any time, e.g. after HDB updates the dataset); requests are
-# MAGIC paced well below OneMap's limit and retried with back-off on errors. A first full run (about 10,800 blocks) takes roughly an hour.
+# MAGIC paced well below OneMap's limit and retried with back-off on errors. A first full run (about 10,800 blocks) takes about two hours.
 # MAGIC
 # MAGIC **Important:** rental-flat counts are a **proxy** for where outreach may be needed. They are not counts of elderly residents,
 # MAGIC low-income households or homes without air-conditioning.
@@ -46,8 +46,9 @@ CACHE = f"{CATALOG}.{SCHEMA}.silver_hdb_block_geocode"
 STATIC_DIR = f"/Volumes/{CATALOG}/{SCHEMA}/raw/static"
 HEADERS = {"x-api-key": dbutils.secrets.get(scope="heatguard", key="datagov_api_key")}
 ONEMAP = "https://www.onemap.gov.sg/api/common/elastic/search"
-MAX_RPS = 3.5            # all threads together: ~210 requests a minute, under OneMap's published 250/min
-WORKERS = 3              # a few requests in flight at once (each takes ~0.5 s), still capped by MAX_RPS
+MAX_RPS = 1.5            # all threads together; OneMap answers "429 too many requests" to short bursts well below 250/min
+WORKERS = 2              # two requests in flight at once, still capped by MAX_RPS
+BACKOFF_S = 5            # after a 429, every thread waits this long before the next request
 BATCH = 250              # write to the cache every 250 blocks, so a stopped run loses little
 
 dbutils.widgets.text("max_blocks", "0", "Max blocks to geocode this run (0 = all)")
@@ -127,8 +128,10 @@ def search(q, tries=4):
         _wait_turn()
         try:
             r = requests.get(ONEMAP, params={"searchVal": q, "returnGeom": "Y", "getAddrDetails": "Y", "pageNum": 1}, timeout=20)
-            if r.status_code == 429:
-                time.sleep(5 * (attempt + 1)); continue
+            if r.status_code == 429:                     # slow everyone down, not just this thread
+                with _gate:
+                    _next[0] = max(_next[0], time.monotonic() + BACKOFF_S * (attempt + 1))
+                continue
             r.raise_for_status()
             return r.json().get("results") or []
         except Exception:

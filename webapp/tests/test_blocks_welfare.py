@@ -54,6 +54,12 @@ def test_opening_a_record_does_not_complete_it():
 def test_check_and_uncheck():
     s = wf.state([ev("complete", 1), ev("uncomplete", 2)])
     assert s["completed"] is False and s["version"] == 2
+    assert s["outcome"] is None and s["status"] == "pending"          # undoing "done" doesn't leave a stale "reached"
+
+
+def test_last_updater_recorded():
+    s = wf.state([{**ev("complete", 1), "by_email": "volunteer@example.org"}])
+    assert s["updated_by"] == "volunteer@example.org"
 
 
 def test_failed_attempt_stays_incomplete_and_needs_follow_up():
