@@ -4,7 +4,5 @@ env:
     valueFrom: sql-warehouse
   - name: GENIE_SPACE_ID
     valueFrom: genie-space
-  - name: SERVING_ENDPOINT
-    valueFrom: serving-endpoint
   - name: DATAGOV_API_KEY
     valueFrom: datagov-key

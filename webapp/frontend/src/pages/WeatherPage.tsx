@@ -21,7 +21,7 @@ function HourStrip({ hours }: { hours: { h: number; v: number; kind: "observed" 
       {hours.map(({ h, v, kind }) => {
         const w = heatWords(v);
         return (
-          <div key={h} className={clsx("w-20 shrink-0 rounded-2xl border p-2.5 text-center", kind === "estimate" ? "border-dashed border-ink-300 bg-white" : "border-ink-200 bg-ink-50")}>
+          <div key={h} className={clsx("w-20 shrink-0 rounded-2xl border p-2.5 text-center", kind === "estimate" ? "border-dashed border-ink-300 bg-surface" : "border-ink-200 bg-ink-50")}>
             <div className="text-xs font-medium text-ink-500">{hourLabel(h)}</div>
             <div className={clsx("mx-auto mt-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold", w.cls)}>{w.word}</div>
             <div className="mt-1 text-[11px] text-ink-500">{v.toFixed(1)}°</div>
@@ -50,7 +50,7 @@ function ForecastCard({ fc, label }: { fc: PointForecast | null; label: string }
   if (!fc) return <div className="rounded-2xl bg-ink-50 p-4 text-sm text-ink-600">No HeatGuard heat forecast for {label} yet — it is published every evening at about 7 pm.</div>;
   const w = heatWords(fc.peak_c);
   return (
-    <div className="rounded-2xl border border-ink-200 bg-white p-4">
+    <div className="rounded-2xl border border-ink-200 bg-surface p-4">
       <div className="flex flex-wrap items-center gap-2"><Tag kind="forecast" /><span className="text-sm text-ink-500">HeatGuard forecast for the afternoon peak</span></div>
       <div className="mt-2 flex flex-wrap items-baseline gap-3">
         <span className={clsx("rounded-full px-3 py-1 text-base font-semibold", w.cls)}>{w.word} afternoon</span>
@@ -86,7 +86,7 @@ export default function WeatherPage() {
   return (
     <>
       <PageHeader title="Weather & heat" subtitle="Today's conditions and tomorrow's outlook for a place in Singapore." />
-      <section className="mb-5 rounded-3xl border border-ink-200 bg-white p-5 shadow-card"><LocationPicker value={place} onChange={setPlace} /></section>
+      <section className="mb-5 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card"><LocationPicker value={place} onChange={setPlace} /></section>
       {!place ? <p className="text-sm text-ink-500">Choose a place to see the weather.</p> : q.isPending ? (
         <div className="space-y-4"><Skeleton className="h-40 rounded-3xl" /><Skeleton className="h-32 rounded-3xl" /></div>
       ) : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} title="Couldn't load the weather" /> : d && (
@@ -98,7 +98,7 @@ export default function WeatherPage() {
 
           {tab === "today" ? (
             <>
-              <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+              <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
                 <div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-ink-900">Right now</h2><Tag kind="observed" /></div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   {[
@@ -119,25 +119,25 @@ export default function WeatherPage() {
                   </div>
                 )}
               </section>
-              <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+              <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
                 <h2 className="text-lg font-semibold text-ink-900">Heat through the day</h2>
                 <p className="mb-3 mt-1 text-sm text-ink-500">Solid boxes were measured{d.today.observed_by_hour ? ` at ${d.today.observed_by_hour.station}` : ""}; dashed boxes are estimates (NEA does not publish hourly heat forecasts).</p>
                 <HourStrip hours={todayHours} />
               </section>
-              <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+              <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
                 <div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-ink-900">NEA forecast for today</h2><Tag kind="forecast" /></div>
                 <Periods periods={d.today.nea_periods} />
               </section>
             </>
           ) : (
             <>
-              <section className="space-y-3 rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+              <section className="space-y-3 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
                 <h2 className="text-lg font-semibold text-ink-900">Tomorrow's heat</h2>
                 <ForecastCard fc={d.tomorrow.forecast} label="tomorrow" />
                 <h3 className="pt-1 text-sm font-semibold text-ink-700">Hour by hour (estimate)</h3>
                 <HourStrip hours={tomorrowHours} />
               </section>
-              <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+              <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
                 <div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-ink-900">NEA forecast for tomorrow</h2><Tag kind="forecast" /></div>
                 {d.nea_24h && <p className="mt-1 text-sm text-ink-600">{d.nea_24h.overall} · {d.nea_24h.temp_low_c}–{d.nea_24h.temp_high_c} °C ({d.nea_24h.valid_text})</p>}
                 <Periods periods={d.tomorrow.nea_periods} />

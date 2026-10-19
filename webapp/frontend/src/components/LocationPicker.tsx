@@ -64,27 +64,27 @@ export default function LocationPicker({ value, onChange, allowGps = true, autoC
       )}
       <div className="flex flex-wrap gap-2">
         {postal && (
-          <button type="button" onClick={useCentre} className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-3.5 text-sm font-medium text-ink-700 hover:border-brand-300">
+          <button type="button" onClick={useCentre} className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-surface px-3.5 text-sm font-medium text-ink-700 hover:border-brand-300">
             {busy === "centre" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />} My centre
           </button>
         )}
         {allowGps && (
-          <button type="button" onClick={useGps} className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-white px-3.5 text-sm font-medium text-ink-700 hover:border-brand-300">
+          <button type="button" onClick={useGps} className="inline-flex h-10 items-center gap-2 rounded-xl border border-ink-200 bg-surface px-3.5 text-sm font-medium text-ink-700 hover:border-brand-300">
             {busy === "gps" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />} Use my location
           </button>
         )}
       </div>
       <form onSubmit={search} className="flex gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Postal code, address or place, e.g. Bedok Reservoir Park"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Postal code or place name"
           className={clsx(inputClass, "flex-1")} aria-label="Search for a place" maxLength={100} />
         <button type="submit" disabled={q.trim().length < 2 || busy === "search"}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white disabled:opacity-50">
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-ink-900 px-4 text-sm font-medium text-ink-50 disabled:opacity-50">
           {busy === "search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search
         </button>
       </form>
       {error && <p className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900" role="alert">{error}</p>}
       {results && (
-        <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200 bg-white">
+        <ul className="divide-y divide-ink-100 overflow-hidden rounded-xl border border-ink-200 bg-surface">
           {results.map((r) => (
             <li key={`${r.latitude},${r.longitude}`}>
               <button type="button" className="w-full px-3.5 py-2.5 text-left hover:bg-ink-50"

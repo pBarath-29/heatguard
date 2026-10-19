@@ -15,15 +15,15 @@ Student hackathon: build on **Databricks Free Edition** using Singapore open dat
 ## What's built (as of 19 Oct 2026)
 | Piece | Where |
 |---|---|
-| **Website** for Active Ageing Centre coordinators (FastAPI + React): *My plan* (plain-words outlook, to-do list, WhatsApp-ready message in 4 languages, nearby areas, nearest cool place), *Weather* (today/tomorrow), *Activity check*, *Block Radar* (HDB blocks with rental flats + walking round), *Cool places*, *Welfare checks* (fictional demo residents), simple area pages, and *Ask a question* (Genie) | [webapp/](webapp/) · https://heatguard-web-7474645045833960.aws.databricksapps.com |
+| **Website** for Active Ageing Centre coordinators (FastAPI + React): *My plan* (plain-words outlook, to-do list, ready-to-send message in English, Chinese, Malay and Tamil, sent to the centre's Telegram group, nearby areas, nearest cool place), *Weather* (today/tomorrow), *Activity check*, *Cool places*, *Welfare checks* (fictional demo residents), simple area pages, and *Ask a question* (Genie) | [webapp/](webapp/) · https://heatguard-web-7474645045833960.aws.databricksapps.com |
 | **Pipeline** bronze → silver → gold with data-quality expectations | [notebooks/04_pipeline.py](notebooks/04_pipeline.py) · pipeline `heatguard-pipeline` |
 | **Forecast model** (tomorrow's afternoon peak WBGT + chance of High heat) in MLflow / Unity Catalog | [notebooks/05_forecast_model.py](notebooks/05_forecast_model.py) · `workspace.heatguard.wbgt_peak_forecaster@champion` |
 | **Daily job** at 6:45 pm SGT: refresh data → pipeline → forecast → pipeline | `heatguard-daily` |
 | **Keep-alive job**: restarts the website at 5:30 am, checks again at 5:30 pm, so the links stay live on Free Edition | `heatguard-keep-apps-on` · [notebooks/07_keep_apps_running.py](notebooks/07_keep_apps_running.py) |
 | **Genie space** "HeatGuard: ask about heat risk" | [genie/create_genie_space.py](genie/create_genie_space.py) |
 | Ingestion: setup, live 15-min job (paused), backfill, static data | [notebooks/00–03](notebooks/) |
-| HDB blocks placed on the map (OneMap, strict block + street matching) | [notebooks/08_load_hdb_blocks.py](notebooks/08_load_hdb_blocks.py) |
 | Welfare-check demo tables (fictional residents, append-only events) | [notebooks/09_welfare_demo.py](notebooks/09_welfare_demo.py) |
+| Telegram sending tables (linked groups, send log) | [notebooks/10_telegram_setup.py](notebooks/10_telegram_setup.py) |
 
 ## Start here
 - [docs/stage2/build-plan.md](docs/stage2/build-plan.md) — scope, day-by-day plan, mentor questions, demo checklist
@@ -44,7 +44,7 @@ submission/
 data/
   raw/                 downloads from data.gov.sg
   processed/           cleaned / joined outputs
-notebooks/             Databricks notebooks (00 setup → 09 welfare demo)
+notebooks/             Databricks notebooks (00 setup → 10 Telegram setup)
 webapp/                Main website: FastAPI backend + React frontend (Databricks App heatguard-web)
 genie/                 Genie space definition
 reports/, research_notes/   problem-selection research

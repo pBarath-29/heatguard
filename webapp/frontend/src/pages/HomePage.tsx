@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, Send, Snowflake, Sun, ThermometerSun,
+  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, RotateCcw, Send, Share2, Snowflake, Sun, ThermometerSun,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import TelegramSend from "../components/TelegramSend";
 import { Button, ErrorState, inputClass, Segmented, Skeleton } from "../components/ui";
-import { ApiError, api, type CheckinRow, type NearResponse } from "../lib/api";
+import { ApiError, api, features, type CheckinRow, type ComposeInput, type Lang, type NearResponse } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
 
 // ---------- remembered on this device only ----------
@@ -22,7 +23,6 @@ const LEVEL = {
   hot: { bg: "bg-gradient-to-br from-brand-600 to-amber-500", icon: Sun, chip: "Take care" },
   normal: { bg: "bg-gradient-to-br from-emerald-600 to-teal-500", icon: Sun, chip: "Routine day" },
 };
-const LANGS = [["English", "English"], ["中文 (Chinese)", "中文"], ["Bahasa Melayu", "Melayu"], ["தமிழ் (Tamil)", "தமிழ்"]] as const;
 
 function walkMinutes(km: number) {
   return Math.max(1, Math.round(km * 15));   // a gentle walking pace for seniors (~4 km/h)
@@ -47,7 +47,7 @@ function Welcome({ onSet }: { onSet: (postal: string) => void }) {
       <img src="/favicon.svg" alt="" className="h-14 w-14 rounded-2xl shadow-lift" />
       <h1 className="mt-6 text-3xl font-semibold tracking-tight text-ink-900 md:text-4xl">Plan tomorrow's heat check-ins in one minute</h1>
       <p className="mt-3 text-lg leading-relaxed text-ink-600">HeatGuard tells you, every evening, how hot tomorrow afternoon will be around your centre, what to do, and gives you a message ready to send to your seniors.</p>
-      <form onSubmit={(e) => { e.preventDefault(); if (ok) onSet(v); }} className="mt-8 rounded-3xl border border-ink-200 bg-white p-5 shadow-card md:p-6">
+      <form onSubmit={(e) => { e.preventDefault(); if (ok) onSet(v); }} className="mt-8 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
         <label className="block text-[15px] font-medium text-ink-800" htmlFor="postal">Your centre's postal code</label>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
@@ -72,7 +72,7 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
   const toggle = (id: string) => setDone((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]));
   const count = plan.todo.filter((t) => done.includes(t.id)).length;
   return (
-    <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card md:p-6">
+    <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-ink-900">Your to-do</h2>
         <span className={clsx("rounded-full px-3 py-1 text-sm font-medium", count === plan.todo.length ? "bg-emerald-50 text-emerald-700" : "bg-ink-100 text-ink-600")}>
@@ -86,7 +86,7 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
             <li key={t.id}>
               <button onClick={() => toggle(t.id)} aria-pressed={on}
                 className={clsx("flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition", on ? "border-emerald-200 bg-emerald-50/60" : "border-ink-200 hover:border-brand-300 hover:bg-brand-50/30")}>
-                <span className={clsx("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition", on ? "border-emerald-600 bg-emerald-600 text-white" : "border-ink-300 bg-white")}>
+                <span className={clsx("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition", on ? "border-emerald-600 bg-emerald-600 text-white" : "border-ink-300 bg-surface")}>
                   {on && <Check className="h-4 w-4" strokeWidth={3} />}
                 </span>
                 <span>
@@ -102,45 +102,88 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
   );
 }
 
-function MessageCard({ area, centre }: { area: string | null; centre: string }) {
-  const [lang, setLang] = useState<string>("English");
-  const [audience, setAudience] = useState("seniors");
+const LANGS: { code: Lang; label: string }[] = [{ code: "en", label: "English" }, { code: "zh", label: "中文" }, { code: "ms", label: "Melayu" }, { code: "ta", label: "தமிழ்" }];
+const LANG_KEY = "heatguard.messageLanguage";
+
+function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centre: string; cool: string | null }) {
+  const [lang, setLang] = useState<Lang>(() => (["en", "zh", "ms", "ta"].includes(store.get(LANG_KEY) ?? "") ? store.get(LANG_KEY) as Lang : "en"));
+  const [audience, setAudience] = useState<"seniors" | "staff">("seniors");
+  const [text, setText] = useState("");
+  const [edited, setEdited] = useState(false);
   const [copied, setCopied] = useState(false);
-  const q = useQuery({ queryKey: ["msg", area, lang, audience, centre], queryFn: () => api.message(area!, lang, audience, centre), enabled: !!area, staleTime: Infinity, retry: 1 });
-  const copy = async () => { if (!q.data) return; try { await navigator.clipboard.writeText(q.data.text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* text is still selectable */ } };
-  if (!area) return null;
+  const [sheet, setSheet] = useState(false);
+  const input: ComposeInput = { level: plan.level, for_date: plan.for_date ?? "", language: lang, audience, centre, cool, haze: !!plan.haze, focus_areas: plan.focus_areas };
+  const q = useQuery({ queryKey: ["compose", input], queryFn: () => features.compose(input), enabled: !!plan.for_date, staleTime: Infinity });
+  const tg = useQuery({ queryKey: ["telegram"], queryFn: features.telegram, staleTime: 60_000, retry: false });
+  useEffect(() => { if (q.data) { setText(q.data.text); setEdited(false); } }, [q.data]);
+  useEffect(() => { store.set(LANG_KEY, lang); }, [lang]);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {                                       // grow with the text so nothing is hidden on phones
+    const el = box.current; if (!el) return;
+    el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`;
+  }, [text, q.isPending]);
+
+  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* text stays selectable */ } };
+  const t = tg.data;
+  const canSend = !!(t?.configured && t.bot && t.can_manage && t.chats.length > 0);
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(text)}`;
+  const ready = !!text.trim() && !q.isPending;
+
   return (
-    <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card md:p-6">
-      <h2 className="text-lg font-semibold text-ink-900">Message ready to send</h2>
-      <p className="mt-1 text-sm text-ink-500">Uses only HeatGuard's safety steps, written warmly and translated for you.</p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+    <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-ink-900">Message ready to send</h2>
+          <p className="mt-0.5 text-sm text-ink-500">HeatGuard's safety steps in plain words. You can edit it before sending.</p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-3">
         <Segmented value={audience} onChange={setAudience} options={[{ value: "seniors", label: "For seniors" }, { value: "staff", label: "For staff & volunteers" }]} />
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Language">
-          {LANGS.map(([value, label]) => (
-            <button key={value} role="radio" aria-checked={lang === value} onClick={() => setLang(value)}
-              className={clsx("rounded-full border px-3.5 py-1.5 text-sm font-medium transition", lang === value ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-700 hover:border-ink-400")}>{label}</button>
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 no-scrollbar" role="radiogroup" aria-label="Language">
+          {LANGS.map(({ code, label }) => (
+            <button key={code} role="radio" aria-checked={lang === code} onClick={() => setLang(code)} lang={code}
+              className={clsx("h-10 shrink-0 rounded-full border px-4 text-[15px] font-medium transition", lang === code ? "border-ink-900 bg-ink-900 text-ink-50" : "border-ink-200 bg-surface text-ink-700 hover:border-ink-400")}>{label}</button>
           ))}
         </div>
       </div>
-      <div className="mt-4 rounded-2xl bg-ink-50 p-4">
+      <div className="mt-4">
         {q.isPending ? (
-          <div className="space-y-2" aria-label="Preparing your message"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-11/12" /><Skeleton className="h-4 w-4/5" /><p className="pt-1 text-xs text-ink-400">Preparing your message…</p></div>
+          <div className="space-y-2 rounded-2xl bg-ink-50 p-4" aria-label="Preparing your message"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-11/12" /><Skeleton className="h-4 w-4/5" /></div>
         ) : q.isError ? (
-          <div className="text-sm text-amber-800">{q.error instanceof ApiError ? q.error.message : "Couldn't prepare the message."} <button onClick={() => q.refetch()} className="font-medium underline">Try again</button></div>
+          <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">{q.error instanceof ApiError ? q.error.message : "Couldn't prepare the message."} <button onClick={() => q.refetch()} className="font-medium underline">Try again</button></div>
         ) : (
           <>
-            {!q.data.used_ai && <p className="mb-2 text-xs text-ink-500">The writing assistant is busy, so this is the plain version.</p>}
-            <p className="whitespace-pre-wrap text-[16px] leading-relaxed text-ink-900">{q.data.text}</p>
+            <label htmlFor="msg" className="sr-only">Message text</label>
+            <textarea id="msg" lang={lang} value={text} onChange={(e) => { setText(e.target.value); setEdited(true); }} ref={box} rows={6}
+              className="w-full resize-none overflow-hidden rounded-2xl border border-ink-200 bg-ink-50 p-4 text-[16px] leading-relaxed text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
+            {edited && <button onClick={() => { setText(q.data!.text); setEdited(false); }} className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-brand-700"><RotateCcw className="h-3.5 w-3.5" />Undo my changes</button>}
           </>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <a href={q.data ? `https://wa.me/?text=${encodeURIComponent(q.data.text)}` : undefined} target="_blank" rel="noreferrer"
-          aria-disabled={!q.data} className={clsx("inline-flex h-12 items-center gap-2 rounded-xl px-5 text-base font-semibold text-white shadow-sm transition", q.data ? "bg-[#25D366] hover:bg-[#1EB956]" : "pointer-events-none bg-ink-300")}>
-          <Send className="h-5 w-5" /> Send on WhatsApp
-        </a>
-        <Button className="h-12 px-5 text-base" disabled={!q.data} onClick={copy} icon={copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}>{copied ? "Copied" : "Copy"}</Button>
+      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+        {canSend ? (
+          <button type="button" disabled={!ready} onClick={() => setSheet(true)}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telegram px-5 text-base font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50">
+            <Send className="h-5 w-5" /> Send to Telegram
+          </button>
+        ) : (
+          <a href={ready ? shareUrl : undefined} target="_blank" rel="noreferrer" aria-disabled={!ready}
+            className={clsx("inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-base font-semibold text-white shadow-sm transition", ready ? "bg-telegram hover:brightness-110" : "pointer-events-none bg-ink-300")}>
+            <Send className="h-5 w-5" /> Share on Telegram
+          </a>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          {canSend && <a href={ready ? shareUrl : undefined} target="_blank" rel="noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-surface px-4 text-[15px] font-medium text-ink-700 hover:bg-ink-50"><Share2 className="h-5 w-5" />Share</a>}
+          <Button className={clsx("h-12 px-4 text-[15px]", !canSend && "col-span-2")} disabled={!ready} onClick={copy} icon={copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}>{copied ? "Copied" : "Copy"}</Button>
+        </div>
       </div>
+      <p className="mt-3 text-[13px] text-ink-500">
+        {canSend ? <>Sends to {t!.chats.map((c) => c.title).join(", ")}. </> : null}
+        {!canSend && t?.can_manage ? <>Send straight to your centre's Telegram group: <Link to="/settings" className="font-medium text-brand-700">set it up in Settings</Link>. </> : null}
+        {!canSend && !t?.can_manage ? "Share opens Telegram so you can choose who gets it. " : null}
+        Each language uses fixed, hand-written wording — nothing is machine-translated on the fly.
+      </p>
+      {sheet && t && <TelegramSend chats={t.chats} text={text} audience={audience} language={lang} onClose={() => setSheet(false)} />}
     </section>
   );
 }
@@ -192,9 +235,9 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
       </section>
 
       <Todo plan={plan} postal={postal} />
-      <MessageCard area={plan.message_area} centre={title(place.name)} />
+      <MessageCard plan={plan} centre={title(place.name)} cool={cool?.name ?? null} />
 
-      <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card md:p-6">
+      <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
         <h2 className="text-lg font-semibold text-ink-900">Areas near you to check first</h2>
         <p className="mt-1 text-sm text-ink-500">Within 1.5 km of your centre, most at risk first.</p>
         <div className="mt-3 divide-y divide-ink-100">
@@ -216,7 +259,7 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
       </section>
 
       {cool && (
-        <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card md:p-6">
+        <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Snowflake className="h-5 w-5 text-sky-600" /> Nearest cool place</h2>
           <p className="mt-1 text-sm text-ink-500">Free and air-conditioned — suggest it to seniors whose homes get too hot.</p>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sky-50 p-4">
@@ -225,7 +268,7 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
               <div className="text-sm text-ink-600">{cool.space_type} · about {walkMinutes(cool.distance_km)} min walk ({cool.distance_km} km)</div>
             </div>
             <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&origin=${place.latitude},${place.longitude}&destination=${cool.latitude},${cool.longitude}&travelmode=walking`}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700"><Navigation className="h-4 w-4" /> Directions</a>
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:brightness-110"><Navigation className="h-4 w-4" /> Directions</a>
           </div>
           {data.cool_spaces.length > 1 && (
             <p className="mt-3 text-sm text-ink-500">Also nearby: {data.cool_spaces.slice(1).map((c) => `${c.name} (${walkMinutes(c.distance_km)} min)`).join(", ")}.</p>

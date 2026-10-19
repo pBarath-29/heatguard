@@ -2,10 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="HeatGuard: next-day heat-risk check-in list for Active Ageing Centres in Singapore." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="HeatGuard: plan heat check-ins for seniors around your Active Ageing Centre in Singapore." />
+    <meta name="theme-color" content="#F8FAFC" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="HeatGuard" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>HeatGuard</title>
+    <script>
+      try {
+        var t = localStorage.getItem("heatguard.theme");
+        var d = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (d) { document.documentElement.classList.add("dark"); document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0B1120"); }
+      } catch (e) {}
+    </script>
   </head>
   <body class="bg-ink-50 text-ink-800 antialiased">
     <div id="root"></div>

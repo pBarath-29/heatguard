@@ -110,7 +110,7 @@ export default function AskPage() {
             <div className="flex items-center gap-2 text-sm font-medium text-ink-900"><Sparkles className="h-4 w-4 text-brand-600" /> Try one of these</div>
             <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
               {SUGGESTED.map((s) => (
-                <button key={s} onClick={() => ask(s)} className="group flex items-center gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-left text-sm text-ink-700 shadow-sm transition hover:border-brand-300 hover:text-ink-900">
+                <button key={s} onClick={() => ask(s)} className="group flex items-center gap-3 rounded-xl border border-ink-200 bg-surface px-4 py-3 text-left text-sm text-ink-700 shadow-sm transition hover:border-brand-300 hover:text-ink-900">
                   <MessagesSquare className="h-4 w-4 shrink-0 text-ink-400 group-hover:text-brand-600" />{s}
                 </button>
               ))}
@@ -121,7 +121,7 @@ export default function AskPage() {
 
         {messages.map((m, i) => m.role === "user" ? (
           <div key={i} className="flex justify-end gap-3 animate-fade-in">
-            <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-ink-900 px-4 py-2.5 text-[15px] text-white">{m.text}</div>
+            <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-ink-900 px-4 py-2.5 text-[15px] text-ink-50">{m.text}</div>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink-200 text-ink-600"><User className="h-4 w-4" /></div>
           </div>
         ) : (
@@ -145,19 +145,19 @@ export default function AskPage() {
 
         {suggestions.length > 0 && !mutation.isPending && (
           <div className="flex flex-wrap gap-2 pl-11">
-            {suggestions.map((s) => <button key={s} onClick={() => ask(s)} className="rounded-full border border-ink-200 bg-white px-3.5 py-1.5 text-[13px] text-ink-700 shadow-sm hover:border-brand-300 hover:text-ink-900">{s}</button>)}
+            {suggestions.map((s) => <button key={s} onClick={() => ask(s)} className="rounded-full border border-ink-200 bg-surface px-3.5 py-1.5 text-[13px] text-ink-700 shadow-sm hover:border-brand-300 hover:text-ink-900">{s}</button>)}
           </div>
         )}
         <div ref={bottom} />
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); ask(input); }} className="sticky bottom-4 z-10">
-        <div className="flex items-center gap-2 rounded-2xl border border-ink-200 bg-white p-2 shadow-lift focus-within:border-brand-400 focus-within:ring-4 focus-within:ring-brand-500/10">
+        <div className="flex items-center gap-2 rounded-2xl border border-ink-200 bg-surface p-2 shadow-lift focus-within:border-brand-400 focus-within:ring-4 focus-within:ring-brand-500/10">
           <input value={input} onChange={(e) => setInput(e.target.value)} maxLength={500} disabled={mutation.isPending}
             placeholder="e.g. Which areas in Toa Payoh should we check first tomorrow?" aria-label="Your question"
             className="h-11 flex-1 bg-transparent px-3 text-[15px] text-ink-900 placeholder:text-ink-400 focus:outline-none" />
           <button type="submit" disabled={!input.trim() || mutation.isPending} aria-label="Send"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:bg-ink-200">
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white transition hover:brightness-110 disabled:bg-ink-200">
             <ArrowUp className="h-5 w-5" />
           </button>
         </div>

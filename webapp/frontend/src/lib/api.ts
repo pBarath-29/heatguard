@@ -130,7 +130,6 @@ export interface CoolSpace { name: string; space_type: string; latitude: number;
 
 export interface GenieTable { columns: string[]; rows: (string | number | null)[][] }
 export interface GenieAnswer { conversation_id: string; text: string[]; queries: { description: string | null; sql: string | null; table: GenieTable | null }[]; suggestions: string[] }
-export interface MessageOptions { languages: string[]; audiences: { id: string; label: string }[] }
 
 export class ApiError extends Error {
   status: number;
@@ -168,9 +167,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   area: (name: string) => request<AreaResponse>(`/api/area/${encodeURIComponent(name)}`),
-  messageOptions: () => request<MessageOptions>("/api/message/options"),
-  message: (subzone: string, language: string, audience: string, centre?: string) =>
-    request<{ text: string; used_ai: boolean }>("/api/message", { method: "POST", body: JSON.stringify({ subzone, language, audience, centre: centre ?? null }) }),
   genie: (question: string, conversation_id?: string | null) =>
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
@@ -217,6 +213,12 @@ export interface Resident {
   history: WelfareEvent[];
 }
 
+export type Lang = "en" | "zh" | "ms" | "ta";
+export interface ComposeInput { level: "very_hot" | "hot" | "normal"; for_date: string; language: Lang; audience: "seniors" | "staff"; centre: string;
+  cool: string | null; haze: boolean; focus_areas: string[] }
+export interface TelegramChat { chat_id: string; title: string; chat_type: string; linked_by?: string; linked_at?: string }
+export interface TelegramStatus { configured: boolean; bot: { username: string; name: string } | null; bot_error: string | null; chats: TelegramChat[]; can_manage: boolean }
+
 export const features = {
   locate: (q: string) => request<{ results: Place[] }>(`/api/locate?q=${encodeURIComponent(q)}`),
   weather: (lat: number, lon: number) => request<WeatherResponse>(`/api/weather?lat=${lat}&lon=${lon}`),
@@ -224,6 +226,13 @@ export const features = {
   coolPlaces: (lat: number, lon: number) => request<{ places: CoolPlace[]; heat_now: { value_c: number; band: Band; station: string } | null; coverage: string; source: string }>(`/api/cool-places?lat=${lat}&lon=${lon}`),
   me: () => request<{ signed_in: boolean; role: string | null; can_view_welfare: boolean }>("/api/me"),
   welfare: () => request<{ residents: Resident[]; demo: boolean; notice: string }>("/api/welfare"),
+  compose: (body: ComposeInput) => request<{ text: string; language: string; audience: string }>("/api/message/compose", { method: "POST", body: JSON.stringify(body) }),
+  telegram: () => request<TelegramStatus>("/api/telegram"),
+  telegramDiscover: () => request<{ chats: (TelegramChat & { linked: boolean })[] }>("/api/telegram/discover", { method: "POST" }),
+  telegramLink: (chat_id: string) => request<{ chats: TelegramChat[] }>("/api/telegram/chats", { method: "POST", body: JSON.stringify({ chat_id }) }),
+  telegramUnlink: (chat_id: string) => request<{ chats: TelegramChat[] }>(`/api/telegram/chats/${encodeURIComponent(chat_id)}`, { method: "DELETE" }),
+  telegramSend: (body: { chat_ids: string[]; text: string; audience?: string; language?: string; client_send_id: string }) =>
+    request<{ results: { chat_id: string; title: string | null; ok: boolean; error?: string | null; already_sent?: boolean }[]; sent: number }>("/api/telegram/send", { method: "POST", body: JSON.stringify(body) }),
   welfareEvent: (id: string, body: { action: string; outcome?: string | null; remark?: string | null; expected_version: number; client_event_id: string }) =>
     request<{ state: Resident["state"]; history?: WelfareEvent[]; duplicate?: boolean }>(`/api/welfare/${encodeURIComponent(id)}/events`, { method: "POST", body: JSON.stringify(body) }),
 };

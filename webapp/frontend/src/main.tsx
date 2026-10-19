@@ -11,6 +11,7 @@ import ActivityPage from "./pages/ActivityPage";
 import AskPage from "./pages/AskPage";
 import CoolPlacesPage from "./pages/CoolPlacesPage";
 import HomePage from "./pages/HomePage";
+import SettingsPage from "./pages/SettingsPage";
 import WeatherPage from "./pages/WeatherPage";
 import WelfarePage from "./pages/WelfarePage";
 
@@ -31,6 +32,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="activity" element={<ActivityPage />} />
             <Route path="cool-places" element={<CoolPlacesPage />} />
             <Route path="welfare" element={<WelfarePage />} />
+            <Route path="settings" element={<SettingsPage />} />
             {["planner", "now", "my-centre", "proof", "accuracy", "about", "blocks"].map((p) => <Route key={p} path={p} element={<Navigate to="/" replace />} />)}
             <Route path="*" element={<EmptyState title="Page not found" body="That page doesn't exist." action={<Link className="text-sm font-medium text-brand-700" to="/">Go to my plan</Link>} />} />
           </Route>

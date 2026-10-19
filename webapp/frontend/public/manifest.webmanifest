@@ -1,0 +1,10 @@
+{
+  "name": "HeatGuard",
+  "short_name": "HeatGuard",
+  "description": "Plan heat check-ins for seniors around your Active Ageing Centre.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#EA580C",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

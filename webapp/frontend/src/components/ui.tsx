@@ -5,7 +5,7 @@ import { ApiError, type Band } from "../lib/api";
 import { BAND, PSI, TIER } from "../lib/theme";
 
 export function Card({ className, children, padded = true }: { className?: string; children: ReactNode; padded?: boolean }) {
-  return <div className={clsx("rounded-2xl border border-ink-200/80 bg-white shadow-card", padded && "p-5", className)}>{children}</div>;
+  return <div className={clsx("rounded-2xl border border-ink-200/80 bg-surface shadow-card", padded && "p-5", className)}>{children}</div>;
 }
 
 export function CardTitle({ icon, title, subtitle, right }: { icon?: ReactNode; title: string; subtitle?: string; right?: ReactNode }) {
@@ -43,10 +43,10 @@ export function Button({ variant = "secondary", size = "md", icon, loading, clas
       {...rest}
       disabled={disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
-        size === "sm" ? "h-8 px-3 text-[13px]" : "h-10 px-4 text-sm",
-        variant === "primary" && "bg-brand-600 text-white shadow-sm hover:bg-brand-700",
-        variant === "secondary" && "border border-ink-200 bg-white text-ink-700 shadow-sm hover:border-ink-300 hover:bg-ink-50",
+        "inline-flex items-center justify-center gap-1.5 rounded-xl font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60",
+        size === "sm" ? "h-9 px-3 text-[13px] sm:h-8" : "h-11 px-4 text-[15px] sm:h-10 sm:text-sm",
+        variant === "primary" && "bg-brand-600 text-white shadow-sm hover:brightness-110",
+        variant === "secondary" && "border border-ink-200 bg-surface text-ink-700 shadow-sm hover:border-ink-300 hover:bg-ink-50",
         variant === "ghost" && "text-ink-600 hover:bg-ink-100 hover:text-ink-900",
         className,
       )}
@@ -100,7 +100,7 @@ export function Stat({ label, value, sub, tone = "text-ink-900", icon, hint }: {
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={clsx("relative overflow-hidden rounded-lg bg-ink-100", className)}><div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" /></div>;
+  return <div className={clsx("relative overflow-hidden rounded-lg bg-ink-100", className)}><div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/60 dark:via-white/5 to-transparent" /></div>;
 }
 
 export function PageSkeleton({ rows = 4 }: { rows?: number }) {
@@ -138,7 +138,7 @@ export function ErrorState({ error, onRetry, title = "Couldn't load this page" }
 
 export function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-ink-200 bg-white/60 px-6 py-12 text-center">
+    <div className="flex flex-col items-center rounded-2xl border border-dashed border-ink-200 bg-surface/60 px-6 py-12 text-center">
       <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-ink-100 text-ink-400"><SearchX className="h-5 w-5" /></div>
       <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
       {body && <p className="mt-1 max-w-sm text-sm text-ink-500">{body}</p>}
@@ -158,7 +158,7 @@ export function Banner({ tone, icon, children }: { tone: "info" | "success" | "w
 
 export function Segmented<T extends string>({ options, value, onChange, size = "md" }: { options: { value: T; label: ReactNode }[]; value: T; onChange: (v: T) => void; size?: "sm" | "md" }) {
   return (
-    <div className="inline-flex rounded-xl bg-ink-100 p-1" role="tablist">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-ink-100 p-1 no-scrollbar" role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
@@ -167,8 +167,8 @@ export function Segmented<T extends string>({ options, value, onChange, size = "
           onClick={() => onChange(o.value)}
           className={clsx(
             "inline-flex items-center gap-1.5 rounded-lg font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500",
-            size === "sm" ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-[13px]",
-            value === o.value ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-800",
+            size === "sm" ? "px-2.5 py-1.5 text-xs" : "whitespace-nowrap px-3.5 py-2 text-sm sm:py-1.5 sm:text-[13px]",
+            value === o.value ? "bg-surface text-ink-900 shadow-sm ring-1 ring-ink-200/60" : "text-ink-500 hover:text-ink-800",
           )}
         >
           {o.label}
@@ -183,7 +183,7 @@ export function ScoreRing({ score, color, size = 64, label = "risk" }: { score: 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }} title={`Risk score ${Math.round(score)} out of 100`}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1F5F9" strokeWidth={6} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" className="stroke-ink-100" strokeWidth={6} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${c * frac} ${c}`} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -203,4 +203,4 @@ export function Field({ label, children, hint, group }: { label: string; childre
 }
 
 export const inputClass =
-  "h-10 w-full rounded-xl border border-ink-200 bg-white px-3 text-sm text-ink-900 shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
+  "h-11 w-full rounded-xl border border-ink-200 bg-surface px-3 text-base text-ink-900 sm:h-10 sm:text-sm shadow-sm placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20";

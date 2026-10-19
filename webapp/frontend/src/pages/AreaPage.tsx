@@ -48,7 +48,7 @@ export default function AreaPage() {
   return (
     <div className="space-y-5">
       {backLink}
-      <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card">
+      <section className="rounded-3xl border border-ink-200 bg-surface p-6 shadow-card">
         <div className="text-sm text-ink-500">{title(r.planning_area)} · {dayLabel(r.for_date, { long: true })}</div>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink-900">{title(r.subzone_name)}</h1>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -58,7 +58,7 @@ export default function AreaPage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card">
+      <section className="rounded-3xl border border-ink-200 bg-surface p-6 shadow-card">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Users className="h-5 w-5 text-ink-400" /> Why check here</h2>
         <ul className="mt-3 space-y-2.5">
           {reasons.map((t) => <li key={t} className="flex gap-3 text-[16px] leading-relaxed text-ink-800"><span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />{t}</li>)}
@@ -72,7 +72,7 @@ export default function AreaPage() {
         </ul>
       </section>
 
-      <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card">
+      <section className="rounded-3xl border border-ink-200 bg-surface p-6 shadow-card">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Snowflake className="h-5 w-5 text-sky-600" /> Nearest cool place</h2>
         <p className="mt-1 text-sm text-ink-500">Free and air-conditioned — suggest it to seniors whose homes get too hot.</p>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sky-50 p-4">
@@ -81,7 +81,7 @@ export default function AreaPage() {
             <div className="text-sm text-ink-600">{r.nearest_cool_space_type} · about {walkMinutes(r.cool_space_km)} min walk</div>
             {address && <div className="mt-1 flex items-center gap-1 text-sm text-ink-500"><MapPin className="h-4 w-4" />{address}</div>}
           </div>
-          <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700"><Navigation className="h-4 w-4" /> Open in Maps</a>
+          <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:brightness-110"><Navigation className="h-4 w-4" /> Open in Maps</a>
         </div>
       </section>
     </div>

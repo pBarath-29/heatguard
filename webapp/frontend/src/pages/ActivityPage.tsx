@@ -27,7 +27,7 @@ function Result({ r, onRetry }: { r: ActivityResult; onRetry: () => void }) {
         <p className="mt-3 text-sm text-ink-700">{r.activity}{r.place ? ` at ${r.place}` : ""} · {dayLabel(r.date, { long: true })} · {r.start}–{r.end} ({r.duration_min} min) · {r.exertion} effort{r.older_adults ? " · older adults" : ""}</p>
       </section>
 
-      <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+      <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
         <h2 className="text-lg font-semibold text-ink-900">Why</h2>
         <ul className="mt-2 space-y-2">{r.reasons.map((t) => <li key={t} className="flex gap-2.5 text-[15px] text-ink-800"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-400" />{t}</li>)}</ul>
         {r.forecast && (
@@ -48,17 +48,17 @@ function Result({ r, onRetry }: { r: ActivityResult; onRetry: () => void }) {
       <section className="rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-emerald-950"><ShieldAlert className="h-5 w-5" /> What to do</h2>
         <ul className="mt-2 space-y-2">{r.precautions.map((t) => <li key={t} className="flex gap-2.5 text-[15px] text-emerald-950"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />{t}</li>)}</ul>
-        {r.warm_nights && <p className="mt-3 flex gap-2 rounded-2xl bg-white/70 p-3 text-sm text-ink-800"><Moon className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />{r.warm_nights.text}</p>}
+        {r.warm_nights && <p className="mt-3 flex gap-2 rounded-2xl bg-surface/70 p-3 text-sm text-ink-800"><Moon className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />{r.warm_nights.text}</p>}
       </section>
 
       {(r.alternatives.length > 0 || r.shorter || r.indoor_options.length > 0) && (
-        <section className="rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+        <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
           <h2 className="text-lg font-semibold text-ink-900">Safer options</h2>
           {r.alternatives.length > 0 && (
             <div className="mt-3 space-y-2">{r.alternatives.map((a) => (
               <div key={a.start} className="flex items-center justify-between gap-3 rounded-2xl bg-ink-50 p-3.5">
                 <span className="flex items-center gap-2 font-medium text-ink-900"><Clock className="h-4 w-4 text-ink-500" />Move it to {a.start}–{a.end}</span>
-                <span className={clsx("rounded-full px-2.5 py-0.5 text-xs font-semibold", a.status === "Lower risk" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{a.status}</span>
+                <span className={clsx("shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", a.status === "Lower risk" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{a.status}</span>
               </div>))}</div>
           )}
           {r.alternatives.length === 0 && r.status !== "Lower risk" && <p className="mt-2 text-sm text-ink-600">No lower-risk time of the same length was found today between 7 am and 7 pm.</p>}
@@ -96,7 +96,7 @@ export default function ActivityPage() {
   return (
     <>
       <PageHeader title="Is our activity safe?" subtitle="Check a planned outdoor activity against the heat forecast, and get safer options." />
-      <div className="mb-6 space-y-5 rounded-3xl border border-ink-200 bg-white p-5 shadow-card">
+      <div className="mb-6 space-y-5 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Activity"><input className={inputClass} value={form.activity} maxLength={80} onChange={(e) => setForm({ ...form, activity: e.target.value })} /></Field>
           <Field label="How strenuous?" group>

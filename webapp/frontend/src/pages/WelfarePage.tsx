@@ -48,7 +48,7 @@ function ResidentCard({ r, draft, setDraft, onSave, saving, error }: {
   const s = r.state, st = STATUS_STYLE[s.status];
   const busy = saving !== null;
   return (
-    <article className={clsx("rounded-3xl border bg-white p-4 shadow-card sm:p-5", s.completed ? "border-emerald-200" : s.follow_up ? "border-amber-200" : "border-ink-200")}>
+    <article className={clsx("rounded-3xl border bg-surface p-4 shadow-card sm:p-5", s.completed ? "border-emerald-200" : s.follow_up ? "border-amber-200" : "border-ink-200")}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -63,7 +63,7 @@ function ResidentCard({ r, draft, setDraft, onSave, saving, error }: {
         <button type="button" disabled={busy} onClick={() => onSave(s.completed ? "uncomplete" : "complete")}
           aria-pressed={s.completed} aria-label={s.completed ? `Undo done for ${r.name}` : `Mark ${r.name} as done`}
           className={clsx("inline-flex h-14 min-w-[150px] items-center justify-center gap-2 rounded-2xl px-4 text-base font-semibold transition",
-            s.completed ? "border-2 border-emerald-500 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" : "bg-emerald-600 text-white hover:bg-emerald-700", busy && "opacity-60")}>
+            s.completed ? "border-2 border-emerald-500 bg-emerald-50 text-emerald-800 hover:bg-emerald-100" : "bg-emerald-600 text-white hover:brightness-110", busy && "opacity-60")}>
           {saving === "complete" || saving === "uncomplete" ? <Loader2 className="h-5 w-5 animate-spin" /> : s.completed ? <Undo2 className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
           {s.completed ? "Done · undo" : "Mark done"}
         </button>
@@ -87,7 +87,7 @@ function ResidentCard({ r, draft, setDraft, onSave, saving, error }: {
           {mode === "attempt" && (
             <fieldset><legend className="mb-2 text-sm font-medium text-ink-800">What happened?</legend>
               <div className="flex flex-wrap gap-2">{["no_response", "unavailable", "unreachable", "referred"].map((o) => (
-                <label key={o} className={clsx("cursor-pointer rounded-xl border px-3 py-2 text-sm", draft.outcome === o ? "border-ink-900 bg-white font-medium" : "border-ink-200 bg-white")}>
+                <label key={o} className={clsx("cursor-pointer rounded-xl border px-3 py-2 text-sm", draft.outcome === o ? "border-ink-900 bg-surface font-medium" : "border-ink-200 bg-surface")}>
                   <input type="radio" name={`o-${r.resident_id}`} value={o} checked={draft.outcome === o} onChange={() => setDraft({ ...draft, outcome: o })} className="sr-only" />{OUTCOME_LABEL[o]}
                 </label>))}</div></fieldset>)}
           <label className="block text-sm font-medium text-ink-800">{mode === "attempt" ? "Remark (optional)" : "Remark"}
@@ -167,7 +167,7 @@ export default function WelfarePage() {
   if (me.isError) return <><PageHeader title="Welfare checks" /><ErrorState error={me.error} onRetry={() => me.refetch()} /></>;
   if (!me.data.can_view_welfare) return (
     <><PageHeader title="Welfare checks" />
-      <div className="flex items-start gap-3 rounded-3xl border border-ink-200 bg-white p-6 shadow-card"><Lock className="mt-0.5 h-6 w-6 text-ink-400" /><div>
+      <div className="flex items-start gap-3 rounded-3xl border border-ink-200 bg-surface p-6 shadow-card"><Lock className="mt-0.5 h-6 w-6 text-ink-400" /><div>
         <h2 className="text-lg font-semibold text-ink-900">{me.data.signed_in ? "You don't have access yet" : "Please sign in"}</h2>
         <p className="mt-1 text-ink-600">{me.data.signed_in ? "Welfare check lists are only shown to volunteers and coordinators. Ask your coordinator to add you." : "Sign in with your Databricks account to see welfare checks."}</p></div></div></>);
 
@@ -180,7 +180,7 @@ export default function WelfarePage() {
         <>
           <div className="mb-4 grid grid-cols-3 gap-3">
             {[["To do", counts.todo, "text-ink-900"], ["Follow up", counts.follow_up, "text-amber-700"], ["Done", counts.done, "text-emerald-700"]].map(([l, n, c]) => (
-              <div key={l as string} className="rounded-2xl border border-ink-200 bg-white p-3 text-center shadow-card"><div className={clsx("text-2xl font-semibold", c as string)}>{n}</div><div className="text-xs text-ink-500">{l}</div></div>))}
+              <div key={l as string} className="rounded-2xl border border-ink-200 bg-surface p-3 text-center shadow-card"><div className={clsx("text-2xl font-semibold", c as string)}>{n}</div><div className="text-xs text-ink-500">{l}</div></div>))}
           </div>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Segmented value={filter} onChange={setFilter} options={[{ value: "todo", label: `To do (${counts.todo})` }, { value: "follow_up", label: `Follow up (${counts.follow_up})` }, { value: "done", label: `Done (${counts.done})` }, { value: "all", label: "All" }]} />

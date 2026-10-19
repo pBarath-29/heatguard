@@ -1,4 +1,5 @@
 const SMALL = new Set(["of", "and", "the"]);
+const UPPER = new Set(["cc", "rc", "nlb", "hdb", "mrt", "sg", "ii"]);
 
 /** "TELOK BLANGAH RISE" → "Telok Blangah Rise" */
 export function title(s: string | null | undefined): string {
@@ -6,7 +7,7 @@ export function title(s: string | null | undefined): string {
   return s
     .toLowerCase()
     .split(/(\s+|-|\/)/)
-    .map((w, i) => (i > 0 && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map((w, i) => (UPPER.has(w) ? w.toUpperCase() : i > 0 && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
     .join("");
 }
 
