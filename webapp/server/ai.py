@@ -1,4 +1,4 @@
-"""Genie (Ask HeatGuard) and the message writer (Llama). Both turn failures into friendly messages."""
+"""Genie (Ask HeatGuard): turns the Conversation API's answers and failures into plain, friendly results."""
 import datetime as dt
 
 import pandas as pd
@@ -7,17 +7,6 @@ from .db import DataError, setting, workspace
 
 GENIE_TIMEOUT = dt.timedelta(minutes=2)
 
-LANGUAGES = ["English", "中文 (Chinese)", "Bahasa Melayu", "தமிழ் (Tamil)"]
-AUDIENCES = {
-    "seniors": "a short, warm WhatsApp or SMS message to seniors living in the area, in very simple words, "
-               "no jargon (do not mention WBGT, PSI or scores)",
-    "staff": "a short briefing for Active Ageing Centre staff and volunteers who will phone or visit seniors, "
-             "with the reason and the steps as a numbered list",
-}
-SYSTEM = ("You rewrite heat-safety outreach guidance for Active Ageing Centre staff in Singapore. "
-          "Use ONLY the facts and actions provided. Do not add new actions, medical advice, phone numbers, places or numbers that are not given. "
-          "Describe the heat and haze levels exactly as given (for example 'moderate heat stress'); do not exaggerate or play them down. "
-          "Keep it under 120 words. Write the whole message in {language}. Keep place names in English but write dates and days in the chosen language. Output only the message, without quotation marks.")
 
 
 def _statement_to_table(sr):
@@ -75,62 +64,3 @@ def ask_genie(question, conversation_id=None):
     return out
 
 
-def facts(row):
-    area = str(row["subzone_name"]).title()
-    pa = str(row["planning_area"]).title()
-    day = pd.Timestamp(row["for_date"]).strftime("%A %d %B") if row.get("for_date") else "tomorrow"
-    heat = f"{'forecast' if row.get('heat_is_forecast') else 'observed'} afternoon heat stress {row.get('heat_band') or 'unknown'}"
-    if row.get("high_alert"):
-        heat += f", with a {row['prob_high'] * 100:.0f}% chance of High heat"
-    psi = row.get("psi_twenty_four_hourly")
-    haze = f"{row.get('psi_band')} (PSI {int(psi)})" if psi is not None and not pd.isna(psi) else "no reading"
-    cool = f"{row.get('nearest_cool_space')} ({row.get('nearest_cool_space_type')}, {row.get('cool_space_km')} km away)"
-    return area, pa, day, heat, haze, cool, str(row.get("action") or "")
-
-
-_message_cache = {}
-
-
-def senior_advice(row):
-    """What seniors themselves should do — the senior-facing side of the HeatGuard rulebook (staff actions such as
-    'call or visit before 11 am' are left out)."""
-    very_hot = row.get("heat_band") == "High" or row.get("high_alert") or row.get("tier") == "Start here"
-    hot = very_hot or row.get("heat_band") == "Moderate"
-    cool = row.get("nearest_cool_space") or "the nearest Community Club"
-    parts = []
-    if very_hot:
-        parts.append(f"Stay indoors from 11 am to 4 pm. Drink water often, even if you are not thirsty. If your home gets too hot, go to {cool}, which is free and air-conditioned.")
-    elif hot:
-        parts.append(f"Avoid going out from 12 pm to 4 pm. Drink water often. If your home gets too hot, go to {cool}, which is free and air-conditioned.")
-    else:
-        parts.append("Have a normal day and drink enough water.")
-    if row.get("psi_band") in ("Unhealthy", "Very unhealthy", "Hazardous"):
-        parts.append("Because of the haze, keep windows closed and spend less time outdoors. If you have heart or lung problems, keep your medication with you.")
-    return " ".join(parts)
-
-
-def write_message(row, language, audience, centre=None):
-    """Returns (text, used_ai). Falls back to the plain rulebook text if the model is unavailable. Results are cached."""
-    from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
-    area, pa, day, heat, haze, cool, action = facts(row)
-    if language not in LANGUAGES or audience not in AUDIENCES:
-        raise DataError("Please choose a language and who the message is for.")
-    if audience == "seniors":
-        action = senior_advice(row)       # seniors get advice for themselves, never the staff instructions
-    key = (row.get("subzone_name"), row.get("for_date"), language, audience, centre)
-    if key in _message_cache:
-        return _message_cache[key], True
-    sign = f" Sign off as \"{centre}\"." if centre else ""
-    prompt = (f"Write {AUDIENCES[audience]}.{sign}\n\nArea: {area} ({pa}). Day: {day}. Heat: {heat}. Haze: {haze}. "
-              f"Nearest air-conditioned place: {cool}.\nActions to include (keep all of them, no others):\n{action}")
-    try:
-        resp = workspace().serving_endpoints.query(
-            name=setting("SERVING_ENDPOINT"),
-            messages=[ChatMessage(role=ChatMessageRole.SYSTEM, content=SYSTEM.format(language=language)),
-                      ChatMessage(role=ChatMessageRole.USER, content=prompt)],
-            max_tokens=400, temperature=0.3)
-        text = resp.choices[0].message.content.strip().strip('"“”').strip()
-        _message_cache[key] = text
-        return text, True
-    except Exception:  # noqa: BLE001 — never leave the coordinator without a message
-        return f"{area} — {day}\n{heat[0].upper() + heat[1:]}.\nNearest cool space: {cool}.\n\nWhat to do:\n{action}", False

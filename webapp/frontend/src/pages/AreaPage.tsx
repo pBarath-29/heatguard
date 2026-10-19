@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowLeft, CheckCircle2, CloudFog, MapPin, MessageSquareText, Navigation, Snowflake, Sun, ThermometerSun, Users } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, CheckCircle2, CloudFog, MapPin, Navigation, Snowflake, Sun, ThermometerSun, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import MessageDialog from "../components/MessageDialog";
-import { Button, ErrorState, Skeleton } from "../components/ui";
+import { ErrorState, Skeleton } from "../components/ui";
 import { ApiError, api } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
 
@@ -21,7 +19,6 @@ function walkMinutes(km: number) {
 export default function AreaPage() {
   const { name = "" } = useParams();
   const navigate = useNavigate();
-  const [messageOpen, setMessageOpen] = useState(false);
   const q = useQuery({ queryKey: ["area", name], queryFn: () => api.area(name), retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 1 });
   const back = (e: React.MouseEvent) => { if (window.history.length > 1) { e.preventDefault(); navigate(-1); } };
   const backLink = <Link to="/" onClick={back} className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-ink-800"><ArrowLeft className="h-4 w-4" /> Back</Link>;
@@ -59,7 +56,6 @@ export default function AreaPage() {
           <span className={clsx("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium", heat.cls)}><HeatIcon className="h-4 w-4" />{heat.text}</span>
           {["Unhealthy", "Very unhealthy", "Hazardous"].includes(r.psi_band ?? "") && <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1 text-sm font-medium text-ink-700"><CloudFog className="h-4 w-4" />Haze: {r.psi_band?.toLowerCase()}</span>}
         </div>
-        <Button variant="primary" className="mt-5 h-12 px-5 text-base" icon={<MessageSquareText className="h-5 w-5" />} onClick={() => setMessageOpen(true)}>Write a message for this area</Button>
       </section>
 
       <section className="rounded-3xl border border-ink-200 bg-white p-6 shadow-card">
@@ -88,7 +84,6 @@ export default function AreaPage() {
           <a href={mapsUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700"><Navigation className="h-4 w-4" /> Open in Maps</a>
         </div>
       </section>
-      {messageOpen && <MessageDialog row={r} onClose={() => setMessageOpen(false)} />}
     </div>
   );
 }

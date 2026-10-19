@@ -143,51 +143,10 @@ def warm_night_streak(night_mins: list[tuple[dt.date, float | None]]) -> int | N
     return streak
 
 
-# ---- walking routes (Block Radar) ---------------------------------------------------------------------------------
+# ---- distances ---------------------------------------------------------------------------------
 def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     (la1, lo1), (la2, lo2) = a, b
     p1, p2 = math.radians(la1), math.radians(la2)
     h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lo2 - lo1) / 2) ** 2
     return 2 * 6371 * math.asin(math.sqrt(h))
 
-
-def order_stops(start: tuple[float, float], stops: list[dict]) -> list[dict]:
-    """Nearest-next ordering from the start point (good enough for up to ~10 blocks; not a guaranteed shortest route)."""
-    left, here, out = list(stops), start, []
-    while left:
-        nxt = min(left, key=lambda s: haversine_km(here, (s["latitude"], s["longitude"])))
-        left.remove(nxt); out.append(nxt); here = (nxt["latitude"], nxt["longitude"])
-    return out
-
-
-def route_plan(start: tuple[float, float], stops: list[dict], visit_min: int) -> dict:
-    ordered = order_stops(start, stops)
-    legs, here = [], start
-    for s in ordered:
-        km = haversine_km(here, (s["latitude"], s["longitude"])) * ROUTE_DETOUR
-        legs.append({"km": round(km, 2), "walk_min": max(1, round(km / WALK_KMH * 60))}); here = (s["latitude"], s["longitude"])
-    walk = sum(l["walk_min"] for l in legs)
-    return {"stops": ordered, "legs": legs, "walk_min": walk, "visit_min": visit_min * len(ordered),
-            "total_min": walk + visit_min * len(ordered), "walk_km": round(sum(l["km"] for l in legs), 2)}
-
-
-def best_departure(hourly: dict[int, float], total_min: int, earliest: dt.time = dt.time(8, 0), latest: dt.time = dt.time(17, 0)) -> dict:
-    """Departure (15-minute steps) whose route window has the lowest estimated heat; earliest wins ties.
-    Returns status 'insufficient' if there is no estimate, and 'too_hot' if every window reaches Moderate or worse."""
-    if not hourly:
-        return {"status": "insufficient"}
-    best = None
-    t = dt.datetime.combine(dt.date(2000, 1, 1), earliest)
-    end = dt.datetime.combine(dt.date(2000, 1, 1), latest)
-    while t <= end:
-        hours = hours_covered(t.time(), total_min)
-        if all(h in hourly for h in hours):
-            peak = max(hourly[h] for h in hours)
-            if best is None or peak < best["window_max_c"] - 1e-9:
-                fin = t + dt.timedelta(minutes=total_min)
-                best = {"depart": t.strftime("%H:%M"), "finish": fin.strftime("%H:%M"), "window_max_c": peak, "band": band(peak)}
-        t += dt.timedelta(minutes=15)
-    if best is None:
-        return {"status": "insufficient"}
-    best["status"] = "ok" if best["window_max_c"] < WBGT_MODERATE else "too_hot"
-    return best

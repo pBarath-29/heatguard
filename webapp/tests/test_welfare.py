@@ -1,45 +1,7 @@
 import pytest
 
-from server import blocks as bk
 from server import welfare as wf
 
-
-def blk(no, r1, r2, year=1990, floors=12):
-    return {"blk_no": no, "street": "TEST ST", "rental_1room": r1, "rental_2room": r2, "year_completed": year, "max_floor": floors,
-            "latitude": 1.3, "longitude": 103.9}
-
-
-# ---------------- Block Radar ----------------
-def test_ranking_and_share_use_subzone_total():
-    blocks = [blk("1", 100, 50), blk("2", 0, 0), blk("3", 30, 0), blk("4", 10, 10), blk("5", 5, 0), blk("6", 0, 40), blk("7", 2, 1), blk("8", 1, 0)]
-    r = bk.rank_blocks(blocks)
-    assert [b["blk_no"] for b in r["top"]] == ["1", "6", "3", "4", "5", "7"]
-    assert r["subzone_rental_total"] == 249
-    assert r["top_rental_total"] == 248
-    assert r["top_share"] == round(248 / 249, 4)
-    assert r["note"] is None
-
-
-def test_fewer_than_six_blocks_explained():
-    r = bk.rank_blocks([blk("1", 5, 0), blk("2", 0, 0)])
-    assert len(r["top"]) == 1 and "Only 1 block" in r["note"]
-
-
-def test_no_rental_blocks():
-    r = bk.rank_blocks([blk("1", 0, 0)])
-    assert r["top"] == [] and r["top_share"] is None and "No blocks" in r["note"]
-
-
-def test_flags_are_descriptive_and_configurable():
-    assert bk.flags(blk("1", 1, 0, year=1978, floors=25)) == ["Older block (completed 1978)", "Tall block (25 floors)"]
-    assert bk.flags(blk("1", 1, 0, year=1978, floors=25), older_year=1970, tall_floors=30) == []
-
-
-def test_filters():
-    blocks = [blk("1", 100, 0, 1975, 12), blk("2", 5, 0, 1995, 25), blk("3", 0, 0, 1980, 30)]
-    assert [b["blk_no"] for b in bk.filter_blocks(blocks, min_rental=10)] == ["1"]
-    assert [b["blk_no"] for b in bk.filter_blocks(blocks, year_to=1985)] == ["1", "3"]
-    assert [b["blk_no"] for b in bk.filter_blocks(blocks, min_floor=20)] == ["2", "3"]
 
 
 # ---------------- Welfare checklist ----------------

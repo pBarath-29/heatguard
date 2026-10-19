@@ -209,23 +209,6 @@ export interface ActivityResult {
   warm_nights?: { streak: number; station: string; text: string } | null; nea_periods: NeaPeriod[];
   forecast: PointForecast | null; uncertainty?: string; sources: string[]; disclaimer: string; nea_note?: string | null;
 }
-export interface Block {
-  blk_no: string; street: string; street_full: string | null; postal: string | null; latitude: number; longitude: number; year_completed: number | null;
-  max_floor: number | null; rental_1room: number | null; rental_2room: number | null; rental_total: number; flags?: string[]; rank?: number;
-}
-export interface BlocksResponse {
-  subzone: string; planning_area: string; blocks: Block[]; total_blocks: number;
-  ranking: { top: Block[]; subzone_rental_total: number; top_rental_total: number; top_share: number | null; blocks_with_rental: number; note: string | null };
-  unplaced_in_town: { blocks: number; rental_flats: number }; centre: { latitude: number; longitude: number };
-  source: { dataset: string; loaded_at: string; locations: string }; proxy_note: string; flag_note: string;
-}
-export interface SubzoneOption { subzone_name: string; planning_area: string; blocks: number; rental_flats: number; tier: string | null; rank: number | null; distance_km?: number }
-export interface RouteResponse {
-  stops: Block[]; legs: { km: number; walk_min: number }[]; walk_min: number; visit_min: number; total_min: number; walk_km: number;
-  start: { latitude: number; longitude: number; label: string }; missing: string[];
-  timing: { status: "ok" | "too_hot" | "insufficient"; depart?: string; finish?: string; window_max_c?: number; band?: string };
-  advice: string; directions_url: string; date: string; assumptions: string;
-}
 export interface WelfareEvent { action: string; outcome: string | null; remark: string | null; by_email: string; at: string }
 export interface Resident {
   resident_id: string; name: string; block: string; street: string; unit: string; postal: string; phone: string; notes: string; demo: boolean;
@@ -239,13 +222,6 @@ export const features = {
   weather: (lat: number, lon: number) => request<WeatherResponse>(`/api/weather?lat=${lat}&lon=${lon}`),
   activity: (body: ActivityInput) => request<ActivityResult>("/api/activity-check", { method: "POST", body: JSON.stringify(body) }),
   coolPlaces: (lat: number, lon: number) => request<{ places: CoolPlace[]; heat_now: { value_c: number; band: Band; station: string } | null; coverage: string; source: string }>(`/api/cool-places?lat=${lat}&lon=${lon}`),
-  subzones: (lat?: number, lon?: number) => request<{ subzones: SubzoneOption[] }>(`/api/blocks/subzones${lat != null ? `?lat=${lat}&lon=${lon}` : ""}`),
-  blocks: (subzone: string, f: { min_rental?: number; year_from?: number; year_to?: number; min_floor?: number }) => {
-    const q = new URLSearchParams({ subzone, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v != null && !Number.isNaN(v)).map(([k, v]) => [k, String(v)])) });
-    return request<BlocksResponse>(`/api/blocks?${q}`);
-  },
-  route: (body: { subzone: string; stops: { blk_no: string; street: string }[]; start_latitude: number; start_longitude: number; start_label: string; visit_min: number; day: string }) =>
-    request<RouteResponse>("/api/blocks/route", { method: "POST", body: JSON.stringify(body) }),
   me: () => request<{ signed_in: boolean; role: string | null; can_view_welfare: boolean }>("/api/me"),
   welfare: () => request<{ residents: Resident[]; demo: boolean; notice: string }>("/api/welfare"),
   welfareEvent: (id: string, body: { action: string; outcome?: string | null; remark?: string | null; expected_version: number; client_event_id: string }) =>

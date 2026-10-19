@@ -1,10 +1,10 @@
-"""API for the coordinator features: Block Radar, activity check, today/tomorrow weather, cooling places, welfare checklist."""
+"""API for the coordinator features: activity check, today/tomorrow weather, cooling places, welfare checklist, ready-to-send
+messages and Telegram sending."""
 from __future__ import annotations
 
 import datetime as dt
 import logging
 import re
-import urllib.parse
 import uuid
 from typing import Optional
 
@@ -13,8 +13,9 @@ import requests
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import blocks as bk
 from . import heatrisk as hr
+from . import messages as msg
+from . import telegram as tg
 from . import weather as wx
 from . import welfare as wf
 from .db import S, DataError, execute, query, records
@@ -231,92 +232,6 @@ def activity_check(b: ActivityBody):
             "nea_note": nea_err}
 
 
-# ======================================================================= Block Radar
-def _blocks(subzone: str):
-    return query(f"""SELECT blk_no, street, street_full, postal, latitude, longitude, year_completed, max_floor, rental_1room, rental_2room,
-                            rental_total, dwelling_units, subzone_name, planning_area FROM {S}.gold_hdb_blocks WHERE subzone_name = :sz""",
-                 {"sz": subzone.upper()})
-
-
-@router.get("/blocks/subzones")
-def block_subzones(lat: Optional[float] = None, lon: Optional[float] = None):
-    sz = query(f"""SELECT b.subzone_name, b.planning_area, count(*) AS blocks, sum(b.rental_total) AS rental_flats,
-                          avg(b.latitude) AS latitude, avg(b.longitude) AS longitude, max(c.tier) AS tier, max(c.rank) AS rank
-                   FROM {S}.gold_hdb_blocks b LEFT JOIN {S}.gold_checkin_list c USING (subzone_name)
-                   GROUP BY b.subzone_name, b.planning_area HAVING sum(b.rental_total) > 0""")
-    rows = records(sz)
-    if lat is not None and lon is not None:
-        for r in rows:
-            r["distance_km"] = round(hr.haversine_km((lat, lon), (r["latitude"], r["longitude"])), 1)
-        rows.sort(key=lambda r: r["distance_km"])
-    else:
-        rows.sort(key=lambda r: (r["rank"] or 9999))
-    return {"subzones": rows}
-
-
-@router.get("/blocks")
-def blocks(subzone: str, min_rental: int = 0, year_from: Optional[int] = None, year_to: Optional[int] = None, min_floor: Optional[int] = None):
-    df = _blocks(subzone)
-    if df.empty:
-        raise HTTPException(404, detail="No HDB blocks with rental flats were placed in that area.")
-    all_blocks = records(df)
-    ranking = bk.rank_blocks(all_blocks)                                     # share always uses the whole subzone
-    shown = bk.filter_blocks(all_blocks, min_rental, year_from, year_to, min_floor)
-    for b in shown:
-        b["flags"] = bk.flags(b)
-    pa = all_blocks[0]["planning_area"]
-    unplaced = query(f"""SELECT count(*) AS blocks, coalesce(sum(rental_total), 0) AS rental_flats FROM {S}.gold_hdb_blocks_unplaced
-                         WHERE upper(hdb_town) = :pa AND rental_total > 0""", {"pa": pa})
-    fresh = query(f"""SELECT max(_loaded_at) AS loaded_at FROM {S}.bronze_hdb_property""")
-    lat = sum(b["latitude"] for b in all_blocks) / len(all_blocks)
-    lon = sum(b["longitude"] for b in all_blocks) / len(all_blocks)
-    return {"subzone": subzone.upper(), "planning_area": pa, "blocks": shown, "total_blocks": len(all_blocks), "ranking": ranking,
-            "unplaced_in_town": records(unplaced)[0], "centre": {"latitude": lat, "longitude": lon},
-            "source": {"dataset": "HDB Property Information (data.gov.sg)", "loaded_at": records(fresh)[0]["loaded_at"],
-                       "locations": "OneMap search (Singapore Land Authority), exact block + street matches only"},
-            "proxy_note": "Rental-flat counts show where outreach may be most needed. They are not counts of elderly residents, low-income households or homes without air-conditioning.",
-            "flag_note": f"'Older' = completed in or before {bk.OLDER_BLOCK_YEAR}; 'Tall' = {bk.TALL_BLOCK_FLOORS}+ floors. These describe the building only — they do not mean the block is hotter."}
-
-
-class RouteBody(BaseModel):
-    subzone: str = Field(max_length=80)
-    stops: list[dict] = Field(min_length=1, max_length=10)
-    start_latitude: float
-    start_longitude: float
-    start_label: str = Field(default="Start", max_length=120)
-    visit_min: int = Field(default=15, ge=5, le=90)
-    day: str = Field(default="tomorrow", pattern="^(today|tomorrow)$")
-
-
-@router.post("/blocks/route")
-def route(b: RouteBody):
-    _check_point(b.start_latitude, b.start_longitude)
-    known = {(x["blk_no"], x["street"]): x for x in records(_blocks(b.subzone))}
-    stops = [known.get((s.get("blk_no"), s.get("street"))) for s in b.stops]
-    missing = [f"Blk {s.get('blk_no')} {s.get('street')}" for s, k in zip(b.stops, stops) if k is None]
-    stops = [s for s in stops if s and s.get("latitude") is not None]
-    if not stops:
-        raise HTTPException(400, detail="None of the chosen blocks have a map location.")
-    plan = hr.route_plan((b.start_latitude, b.start_longitude), stops, b.visit_min)
-    day = _day(b.day)
-    fc = point_forecast(sum(s["latitude"] for s in stops) / len(stops), sum(s["longitude"] for s in stops) / len(stops), day)
-    timing = hr.best_departure(fc["hourly"] if fc else {}, plan["total_min"])
-    if timing["status"] == "ok":
-        advice = f"Recommended start {timing['depart']}, estimated finish {timing['finish']} — the cooler part of the day for this route (estimated up to {timing['window_max_c']:.1f} °C WBGT)."
-    elif timing["status"] == "too_hot":
-        advice = (f"Even the coolest start ({timing['depart']}, finish {timing['finish']}) reaches {timing['band']} heat stress (about {timing['window_max_c']:.1f} °C WBGT). "
-                  "Split the visits into two shorter rounds, cut the number of blocks, or take shade and water breaks between blocks.")
-    else:
-        advice = f"No heat forecast is available for {day:%A %d %B} yet, so no start time can be recommended. Check NEA's advisory before going."
-    pts = [f"{s['latitude']},{s['longitude']}" for s in plan["stops"]]
-    url = ("https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=" + f"{b.start_latitude},{b.start_longitude}"
-           + "&destination=" + pts[-1] + (("&waypoints=" + urllib.parse.quote("|".join(pts[:-1]))) if len(pts) > 1 else ""))
-    return {**plan, "start": {"latitude": b.start_latitude, "longitude": b.start_longitude, "label": b.start_label}, "missing": missing,
-            "timing": timing, "advice": advice, "directions_url": url, "date": day.isoformat(),
-            "assumptions": f"Walking {hr.WALK_KMH:g} km/h; street distance ≈ {hr.ROUTE_DETOUR}× straight line; {b.visit_min} min per block. "
-                           "The line on the map joins the blocks in visiting order; use the directions link for the actual walking path."}
-
-
 # ======================================================================= welfare checklist (demo data only)
 def _email(request: Request) -> str | None:
     return request.headers.get("X-Forwarded-Email") or request.headers.get("x-forwarded-email") or __import__("os").environ.get("DEV_USER_EMAIL")
@@ -404,3 +319,149 @@ def welfare_event(resident_id: str, body: EventBody, request: Request):
     log.info("welfare event saved: action=%s", ev["action"])                         # no personal data in logs
     history = records(_events(resident_id))
     return {"state": wf.state(history), "history": [{k: e[k] for k in ("action", "outcome", "remark", "by_email", "at")} for e in history]}
+
+
+# ======================================================================= ready-to-send messages (fixed translations)
+class ComposeBody(BaseModel):
+    level: str = Field(pattern="^(very_hot|hot|normal)$")
+    for_date: dt.date
+    language: str = Field(pattern="^(en|zh|ms|ta)$")
+    audience: str = Field(pattern="^(seniors|staff)$")
+    centre: str = Field(default="", max_length=80)
+    cool: Optional[str] = Field(default=None, max_length=80)
+    haze: bool = False
+    focus_areas: list[str] = Field(default_factory=list, max_length=5)
+
+
+@router.get("/message/languages")
+def message_languages():
+    return {"languages": [{"code": k, "label": v} for k, v in msg.LANGUAGES.items()]}
+
+
+@router.post("/message/compose")
+def message_compose(b: ComposeBody):
+    try:
+        text = msg.compose(level=b.level, day=b.for_date, today=hr.today_sgt(), language=b.language, audience=b.audience,
+                           centre=b.centre, cool=b.cool, haze=b.haze, focus_areas=[f[:60] for f in b.focus_areas])
+    except msg.MessageError as e:
+        raise HTTPException(400, detail=str(e))
+    return {"text": text, "language": b.language, "audience": b.audience}
+
+
+# ======================================================================= Telegram (groups and channels only)
+def _coordinator(request: Request) -> str:
+    email, role = _require(request)
+    if role != "coordinator":
+        raise HTTPException(403, detail="Only coordinators can set up or send Telegram messages.")
+    return email
+
+
+def _tg(fn, *args):
+    try:
+        return fn(*args)
+    except tg.TelegramError as e:
+        log.warning("telegram call failed: %s", e.detail)                            # detail never contains the token
+        raise HTTPException(502, detail=str(e))
+
+
+def _linked_chats() -> list[dict]:
+    df = query(f"""SELECT chat_id, title, chat_type, by_email AS linked_by, at AS linked_at FROM (
+                     SELECT *, row_number() OVER (PARTITION BY chat_id ORDER BY at DESC) AS n FROM {S}.app_telegram_chats)
+                   WHERE n = 1 AND action = 'link' ORDER BY title""", cache=False)
+    return records(df)
+
+
+@router.get("/telegram")
+def telegram_status(request: Request):
+    email = _email(request)
+    try:
+        role = _role(email)
+    except DataError:
+        role = None
+    out = {"configured": tg.configured(), "bot": None, "bot_error": None, "chats": [], "can_manage": role == "coordinator"}
+    if out["configured"]:
+        try:
+            out["bot"] = tg.bot_info()
+        except tg.TelegramError as e:
+            out["bot_error"] = str(e)
+    if role in ("volunteer", "coordinator"):
+        try:
+            out["chats"] = _linked_chats()
+        except DataError:
+            out["chats"] = []
+    return out
+
+
+@router.post("/telegram/discover")
+def telegram_discover(request: Request):
+    _coordinator(request)
+    found = _tg(tg.discover)
+    linked = {c["chat_id"] for c in _linked_chats()}
+    return {"chats": [{**c, "linked": c["chat_id"] in linked} for c in found]}
+
+
+class LinkBody(BaseModel):
+    chat_id: str = Field(pattern=r"^-?\d{1,20}$")
+
+
+@router.post("/telegram/chats")
+def telegram_link(b: LinkBody, request: Request):
+    email = _coordinator(request)
+    match = [c for c in _tg(tg.discover) if c["chat_id"] == b.chat_id]       # only groups the bot is really in
+    if not match:
+        raise HTTPException(404, detail="The bot can't see that group. Add the bot to it, post a message there, then try again.")
+    c = match[0]
+    execute(f"""INSERT INTO {S}.app_telegram_chats (chat_id, title, chat_type, action, by_email, at)
+                VALUES (:id, :t, :ty, 'link', :by, current_timestamp())""", {"id": c["chat_id"], "t": c["title"][:120], "ty": c["chat_type"], "by": email})
+    return {"chats": _linked_chats()}
+
+
+@router.delete("/telegram/chats/{chat_id}")
+def telegram_unlink(chat_id: str, request: Request):
+    email = _coordinator(request)
+    current = {c["chat_id"]: c for c in _linked_chats()}
+    if chat_id not in current:
+        raise HTTPException(404, detail="That group isn't linked.")
+    c = current[chat_id]
+    execute(f"""INSERT INTO {S}.app_telegram_chats (chat_id, title, chat_type, action, by_email, at)
+                VALUES (:id, :t, :ty, 'unlink', :by, current_timestamp())""", {"id": chat_id, "t": c["title"], "ty": c["chat_type"], "by": email})
+    return {"chats": _linked_chats()}
+
+
+class SendBody(BaseModel):
+    chat_ids: list[str] = Field(min_length=1, max_length=10)
+    text: str = Field(min_length=1, max_length=tg.MAX_TEXT)
+    audience: Optional[str] = Field(default=None, pattern="^(seniors|staff|test)$")
+    language: Optional[str] = Field(default=None, pattern="^(en|zh|ms|ta)$")
+    client_send_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
+
+
+@router.post("/telegram/send")
+def telegram_send(b: SendBody, request: Request):
+    email = _coordinator(request)
+    try:
+        text = tg.check_text(b.text)
+    except tg.TelegramError as e:
+        raise HTTPException(400, detail=str(e))
+    linked = {c["chat_id"]: c for c in _linked_chats()}
+    done = set(query(f"SELECT chat_id FROM {S}.app_telegram_sends WHERE client_send_id = :c AND ok", {"c": b.client_send_id},
+                     cache=False).chat_id)
+    results = []
+    for cid in dict.fromkeys(b.chat_ids):                                            # keep order, drop repeats
+        chat = linked.get(cid)
+        if chat is None:
+            results.append({"chat_id": cid, "title": None, "ok": False, "error": "This group isn't linked any more."}); continue
+        if cid in done:                                                              # double tap / retry: never post twice
+            results.append({"chat_id": cid, "title": chat["title"], "ok": True, "already_sent": True}); continue
+        ok, err = True, None
+        try:
+            tg.send(cid, text)
+        except tg.TelegramError as e:
+            ok, err = False, str(e)
+            log.warning("telegram send failed: %s", e.detail)
+        execute(f"""INSERT INTO {S}.app_telegram_sends (send_id, client_send_id, chat_id, chat_title, audience, language, text, ok, error, by_email, at)
+                    VALUES (:id, :c, :chat, :title, :aud, :lang, :text, :ok, :err, :by, current_timestamp())""",
+                {"id": str(uuid.uuid4()), "c": b.client_send_id, "chat": cid, "title": chat["title"], "aud": b.audience, "lang": b.language,
+                 "text": text, "ok": ok, "err": err, "by": email})
+        results.append({"chat_id": cid, "title": chat["title"], "ok": ok, "error": err})
+    return {"results": results, "sent": sum(r["ok"] for r in results)}

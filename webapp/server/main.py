@@ -1,5 +1,4 @@
 """HeatGuard web app: JSON API for the React frontend, plus the built frontend itself."""
-import datetime as dt
 import os
 import pathlib
 
@@ -11,7 +10,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from . import ai
-from .db import S, ConfigError, DataError, clear_cache, query, records, setting, today_sgt
+from .db import S, ConfigError, DataError, clear_cache, query, records, today_sgt
 
 app = FastAPI(title="HeatGuard", docs_url="/api/docs", openapi_url="/api/openapi.json")
 STATIC = pathlib.Path(__file__).resolve().parent.parent / "static"
@@ -27,7 +26,7 @@ async def config_error(_: Request, e: ConfigError):
     return JSONResponse(status_code=503, content={"error": str(e), "detail": ""})
 
 
-from .features import router as features_router      # noqa: E402  (Block Radar, activity check, weather, cooling places, welfare)
+from .features import router as features_router      # noqa: E402  (activity check, weather, cooling places, welfare)
 
 app.include_router(features_router)
 
@@ -40,7 +39,7 @@ def checkin_rows():
 
 @app.get("/api/health")
 def health():
-    configured = {k: bool(os.environ.get(k)) for k in ("DATABRICKS_WAREHOUSE_ID", "GENIE_SPACE_ID", "SERVING_ENDPOINT")}
+    configured = {k: bool(os.environ.get(k)) for k in ("DATABRICKS_WAREHOUSE_ID", "GENIE_SPACE_ID", "DATAGOV_API_KEY", "TELEGRAM_BOT_TOKEN")}
     return {"ok": True, "configured": configured, "today_sgt": str(today_sgt())}
 
 
@@ -171,7 +170,7 @@ def centre_plan(point, nearby, cool, all_rows):
             "focus_areas": focus, "message_area": lead}
 
 
-# ---------------- AI ----------------
+# ---------------- Genie ----------------
 
 class AskBody(BaseModel):
     question: str = Field(min_length=1, max_length=500)
@@ -182,28 +181,6 @@ class AskBody(BaseModel):
 def genie(body: AskBody):
     return ai.ask_genie(body.question.strip(), body.conversation_id)
 
-
-class MessageBody(BaseModel):
-    subzone: str
-    language: str
-    audience: str
-    centre: Optional[str] = None
-
-
-@app.get("/api/message/options")
-def message_options():
-    return {"languages": ai.LANGUAGES, "audiences": [{"id": "seniors", "label": "Message to seniors"},
-                                                      {"id": "staff", "label": "Briefing for staff and volunteers"}]}
-
-
-@app.post("/api/message")
-def message(body: MessageBody):
-    df = checkin_rows()
-    row = df[df["subzone_name"] == body.subzone.upper()]
-    if row.empty:
-        raise HTTPException(404, detail="That area isn't on the check-in list.")
-    text, used_ai = ai.write_message(records(row)[0], body.language, body.audience, body.centre)
-    return {"text": text, "used_ai": used_ai}
 
 
 # ---------------- frontend ----------------

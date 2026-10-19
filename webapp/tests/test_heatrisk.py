@@ -85,22 +85,6 @@ def test_warm_night_streak():
     assert hr.warm_night_streak([]) is None
 
 
-def test_route_order_and_duration():
-    start = (1.3340, 103.9380)
-    stops = [{"id": "far", "latitude": 1.3400, "longitude": 103.9450}, {"id": "near", "latitude": 1.3345, "longitude": 103.9385}]
-    plan = hr.route_plan(start, stops, visit_min=15)
-    assert [s["id"] for s in plan["stops"]] == ["near", "far"]
-    assert plan["visit_min"] == 30 and plan["total_min"] == plan["walk_min"] + 30
-
-
-def test_best_departure_avoids_heat_and_flags_too_hot():
-    ok = hr.best_departure(day(32.5), total_min=120)
-    assert ok["status"] == "ok" and ok["depart"] == "08:00"
-    hot = hr.best_departure({h: 33.0 for h in range(7, 20)}, total_min=60)
-    assert hot["status"] == "too_hot"
-    assert hr.best_departure({}, 60)["status"] == "insufficient"
-
-
 def test_today_in_singapore_across_midnight():
     # 16:30 UTC on 18 Oct is 00:30 on 19 Oct in Singapore
     assert hr.today_sgt(dt.datetime(2026, 10, 18, 16, 30, tzinfo=dt.timezone.utc)) == dt.date(2026, 10, 19)
