@@ -15,6 +15,7 @@
 # MAGIC | `raw/forecast_24h/` | NEA 24-hour forecast | ~8 issued forecasts, 1 call |
 # MAGIC | `raw/psi/` | Pollutant Standards Index (haze), hourly, 5 regions | 24 records, 1 call |
 # MAGIC | `raw/pm25/` | PM2.5 (haze), hourly, 5 regions | 24 records, 1 call |
+# MAGIC | `raw/air_temperature/` | Air temperature, every minute (last 21 days only — used to count warm nights) | ~1,440 readings, ~58 pages |
 # MAGIC
 # MAGIC Each file is JSON Lines (one API record per line) in the same layout the live job writes, so a single Auto Loader stream in the pipeline reads both.
 # MAGIC
@@ -66,6 +67,9 @@ SOURCES = {
     # haze: each line also carries the region list (5 regions with label locations), same layout as the live job
     "psi":          {"url": f"{BASE}/psi", "list_key": "items", "keep": ["regionMetadata"]},
     "pm25":         {"url": f"{BASE}/pm25", "list_key": "items", "keep": ["regionMetadata"]},
+    # air temperature (1-minute readings, ~58 pages a day): only recent days, for counting warm nights
+    "air_temperature": {"url": f"{BASE}/air-temperature", "list_key": "readings", "keep": ["stations", "readingType", "readingUnit"],
+                        "start": TODAY_SGT - datetime.timedelta(days=21)},
 }
 for name in SOURCES:
     dbutils.fs.mkdirs(f"{RAW}/{name}")
@@ -140,11 +144,13 @@ def exists(path):
 # COMMAND ----------
 
 summary = {name: {"saved": 0, "refreshed": 0, "skipped": 0, "empty": 0} for name in SOURCES}
-day = START
+day = min([START] + [cfg.get("start", START) for cfg in SOURCES.values()])   # some sources start earlier than START
 started = time.time()
 while day <= END:
     recent = REFRESH_FROM is not None and day >= REFRESH_FROM
     for source in SOURCES:
+        if day < SOURCES[source].get("start", START):
+            continue
         path = (f"{RAW}/{source}/recent_{day.isoformat()}_{STAMP}.jsonl" if recent
                 else f"{RAW}/{source}/history_{day.isoformat()}.jsonl")
         if not recent and exists(path):

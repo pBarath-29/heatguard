@@ -1051,6 +1051,85 @@ def gold_replay_summary():
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Gold: tables behind the coordinator features
+# MAGIC
+# MAGIC **`gold_station_hour_profile`** — each WBGT station's *usual* shape of the day over the last 60 days: for every hour, how far that hour's
+# MAGIC highest reading typically sits below the day's afternoon peak (median, plus the 75th percentile as a cautious version). Tomorrow's
+# MAGIC hour-by-hour **estimate** = forecast afternoon peak + this offset. NEA publishes no hourly forecast, so the app always labels these
+# MAGIC values as estimates.
+# MAGIC
+# MAGIC **`gold_hdb_blocks`** — HDB residential blocks (from `08_load_hdb_blocks`) that OneMap placed with an exact match, assigned to the URA
+# MAGIC subzone that contains them, with 1- and 2-room rental flats, year completed and highest floor. **`gold_hdb_blocks_unplaced`** lists
+# MAGIC blocks that could not be placed (ambiguous or unmatched addresses), with the HDB town, so the app can say what is missing.
+# MAGIC
+# MAGIC **`gold_night_min_temp`** — the lowest air temperature each night (8 pm to 8 am) at each station, used to count consecutive **warm
+# MAGIC nights** (NEA advisories commonly describe nights whose minimum stays above 28 °C as warm). Nights with fewer than 6 hours of readings
+# MAGIC are left out rather than guessed.
+
+# COMMAND ----------
+
+HDB_TOWNS = {"AMK": "Ang Mo Kio", "BB": "Bukit Batok", "BD": "Bedok", "BH": "Bishan", "BM": "Bukit Merah", "BP": "Bukit Panjang",
+             "BT": "Bukit Timah", "CCK": "Choa Chu Kang", "CL": "Clementi", "CT": "Central Area", "GL": "Geylang", "HG": "Hougang",
+             "JE": "Jurong East", "JW": "Jurong West", "KWN": "Kallang/Whampoa", "MP": "Marine Parade", "PG": "Punggol", "PRC": "Pasir Ris",
+             "QT": "Queenstown", "SB": "Sembawang", "SGN": "Serangoon", "SK": "Sengkang", "TAP": "Tampines", "TG": "Tengah", "TP": "Toa Payoh",
+             "WL": "Woodlands", "YS": "Yishun"}
+
+@dlt.table(comment="Usual hour-by-hour WBGT shape per station (last 60 days): median and 75th-percentile offset of each hour's highest reading from that day's afternoon peak. Used for hourly ESTIMATES (NEA publishes no hourly forecast).")
+def gold_station_hour_profile():
+    w = spark.read.table("silver_wbgt")
+    recent = w.where(F.col("date_sgt") >= F.date_sub(F.current_date(), 60))
+    hourly = recent.groupBy("station_id", "date_sgt", "hour_sgt").agg(F.max("wbgt_c").alias("hour_max_c"))
+    peaks = (spark.read.table("silver_wbgt_daily_peak").where(f"afternoon_readings >= {MIN_AFTERNOON_READINGS}")
+             .select("station_id", "date_sgt", "afternoon_peak_wbgt_c"))
+    return (hourly.join(peaks, ["station_id", "date_sgt"])
+            .withColumn("offset_c", F.col("hour_max_c") - F.col("afternoon_peak_wbgt_c"))
+            .groupBy("station_id", F.col("hour_sgt").alias("hour"))
+            .agg(F.round(F.percentile_approx("offset_c", 0.5), 2).alias("offset_median_c"),
+                 F.round(F.percentile_approx("offset_c", 0.75), 2).alias("offset_p75_c"),
+                 F.countDistinct("date_sgt").alias("days")))
+
+@dlt.table(comment="HDB residential blocks placed on the map (exact OneMap match) with their URA subzone, 1- and 2-room rental flats, year completed and highest floor. Rental flats are a proxy for outreach need, not a count of elderly residents.")
+@dlt.expect("has_location", "latitude IS NOT NULL AND longitude IS NOT NULL")
+def gold_hdb_blocks():
+    prop = static("bronze_hdb_property").where("residential = 'Y'")
+    geo = static("silver_hdb_block_geocode").where("match_status = 'matched'")
+    to_int = lambda c: F.expr(f"try_cast(`{c}` AS INT)")
+    blocks = (prop.join(geo, ["blk_no", "street"])
+              .select("blk_no", "street", "street_full", "postal", "latitude", "longitude",
+                      to_int("year_completed").alias("year_completed"), to_int("max_floor_lvl").alias("max_floor"),
+                      to_int("1room_rental").alias("rental_1room"), to_int("2room_rental").alias("rental_2room"),
+                      to_int("total_dwelling_units").alias("dwelling_units"), F.col("bldg_contract_town").alias("hdb_town_code")))
+    sz = spark.read.table("silver_subzones").select("subzone_name", "planning_area", "geometry_geojson")
+    return (blocks.join(sz, F.expr("st_contains(st_geomfromgeojson(geometry_geojson), st_point(longitude, latitude))"))
+            .drop("geometry_geojson")
+            .withColumn("rental_total", F.coalesce("rental_1room", F.lit(0)) + F.coalesce("rental_2room", F.lit(0))))
+
+@dlt.table(comment="HDB residential blocks that could not be placed on the map (ambiguous or unmatched OneMap address), with HDB town, so users can see what is missing.")
+def gold_hdb_blocks_unplaced():
+    towns = spark.createDataFrame(list(HDB_TOWNS.items()), "hdb_town_code STRING, hdb_town STRING")
+    prop = static("bronze_hdb_property").where("residential = 'Y'")
+    geo = static("silver_hdb_block_geocode")
+    to_int = lambda c: F.expr(f"try_cast(`{c}` AS INT)")
+    return (prop.join(geo.select("blk_no", "street", "match_status"), ["blk_no", "street"], "left")
+            .where("match_status IS NULL OR match_status <> 'matched'")
+            .select("blk_no", "street", F.coalesce("match_status", F.lit("not yet geocoded")).alias("match_status"),
+                    F.col("bldg_contract_town").alias("hdb_town_code"),
+                    (F.coalesce(to_int("1room_rental"), F.lit(0)) + F.coalesce(to_int("2room_rental"), F.lit(0))).alias("rental_total"))
+            .join(towns, "hdb_town_code", "left"))
+
+@dlt.table(comment="Lowest air temperature per station per night (8 pm to 8 am SGT); night_date = the evening's date. Nights with < 6 hours of readings are excluded.")
+def gold_night_min_temp():
+    t = spark.read.table("silver_air_temperature")
+    night = (t.where((F.col("hour_sgt") >= 20) | (F.col("hour_sgt") < 8))
+             .withColumn("night_date", F.when(F.col("hour_sgt") >= 20, F.col("date_sgt")).otherwise(F.date_sub("date_sgt", 1))))
+    return (night.groupBy("station_id", "night_date")
+            .agg(F.max("station_name").alias("station_name"), F.max("latitude").alias("latitude"), F.max("longitude").alias("longitude"),
+                 F.round(F.min("air_temp_c"), 1).alias("night_min_c"), F.countDistinct("hour_sgt").alias("hours_with_data"))
+            .where("hours_with_data >= 6"))
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Gold: summaries for the app and Genie
 # MAGIC
 # MAGIC Small, ready-to-read tables so the app loads quickly and Genie answers questions without scanning a million rows:
