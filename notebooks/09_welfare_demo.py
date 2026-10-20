@@ -40,24 +40,24 @@ COMMENT 'Who may open welfare checks in the HeatGuard website (role: volunteer o
 
 # MAGIC %md
 # MAGIC ## Demo residents (fictional)
-# MAGIC Placed at HDB blocks around Telok Blangah so the demo matches the example centre (Radin Mas CC). Unit numbers, names and phone
-# MAGIC numbers are invented and marked as demo.
+# MAGIC Placed at **real HDB blocks** in the areas around the example centre (Radin Mas CC): Telok Blangah Rise, Kampong Tiong Bahru,
+# MAGIC Telok Blangah Way and Telok Blangah Drive. Names, unit numbers and phone numbers are invented and marked as demo.
 
 # COMMAND ----------
 
-demo = [
-    ("demo-01", "Demo Resident A", "51", "Telok Blangah Crescent", "#03-101", "Lives alone; uses a walking stick"),
-    ("demo-02", "Demo Resident B", "51", "Telok Blangah Crescent", "#07-114", "Heart condition"),
-    ("demo-03", "Demo Resident C", "52", "Telok Blangah Crescent", "#02-121", ""),
-    ("demo-04", "Demo Resident D", "52", "Telok Blangah Crescent", "#10-133", "Prefers phone calls in Mandarin"),
-    ("demo-05", "Demo Resident E", "55", "Telok Blangah Drive", "#04-205", "Lives alone"),
-    ("demo-06", "Demo Resident F", "55", "Telok Blangah Drive", "#11-219", ""),
-    ("demo-07", "Demo Resident G", "56", "Telok Blangah Drive", "#05-301", "Lung condition; keeps inhaler at home"),
-    ("demo-08", "Demo Resident H", "57", "Telok Blangah Drive", "#08-322", ""),
-    ("demo-09", "Demo Resident I", "59", "Telok Blangah Way", "#06-410", "Lives alone; hard of hearing — knock loudly"),
-    ("demo-10", "Demo Resident J", "60", "Telok Blangah Way", "#09-418", ""),
-    ("demo-11", "Demo Resident K", "61", "Telok Blangah Way", "#12-427", "Prefers Malay"),
-    ("demo-12", "Demo Resident L", "62", "Telok Blangah Way", "#01-431", "Daughter visits on weekends"),
+demo = [   # real HDB blocks near the example centre (exact OneMap matches); residents and unit numbers are fictional
+    ("demo-01", "Demo Resident A", "41", "Telok Blangah Rise", "#03-101", "Lives alone; uses a walking stick"),
+    ("demo-02", "Demo Resident B", "41", "Telok Blangah Rise", "#07-114", "Heart condition"),
+    ("demo-03", "Demo Resident C", "29", "Telok Blangah Rise", "#02-121", ""),
+    ("demo-04", "Demo Resident D", "101", "Bukit Purmei Road", "#10-133", "Prefers phone calls in Mandarin"),
+    ("demo-05", "Demo Resident E", "106", "Jalan Bukit Merah", "#04-205", "Lives alone"),
+    ("demo-06", "Demo Resident F", "106", "Jalan Bukit Merah", "#11-219", ""),
+    ("demo-07", "Demo Resident G", "104", "Jalan Bukit Merah", "#05-301", "Lung condition; keeps inhaler at home"),
+    ("demo-08", "Demo Resident H", "110", "Jalan Bukit Merah", "#08-322", ""),
+    ("demo-09", "Demo Resident I", "19", "Telok Blangah Crescent", "#06-410", "Lives alone; hard of hearing — knock loudly"),
+    ("demo-10", "Demo Resident J", "3", "Telok Blangah Crescent", "#09-418", ""),
+    ("demo-11", "Demo Resident K", "76", "Telok Blangah Drive", "#12-427", "Prefers Malay"),
+    ("demo-12", "Demo Resident L", "45", "Telok Blangah Drive", "#01-431", "Daughter visits on weekends"),
 ]
 import time
 
