@@ -208,8 +208,8 @@ function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centr
       </div>
       <p className="mt-3 text-[13px] text-ink-500">
         {canSend ? <>Sends to {t!.chats.map((c) => c.title).join(", ")}. </> : null}
-        {!canSend && t?.can_manage ? <>Send straight to your centre's Telegram group: <Link to="/settings" className="font-medium text-brand-700">set it up in Settings</Link>. </> : null}
-        {!canSend && !t?.can_manage ? "Share opens Telegram so you can choose who gets it. " : null}
+        {!canSend && t?.configured && t.bot && t.can_manage ? <>To send in one tap, <Link to="/settings" className="font-medium text-brand-700">link your Telegram group in Settings</Link>. </> : null}
+        {!canSend && !(t?.configured && t.bot && t.can_manage) ? "Share opens Telegram with the message filled in — pick your centre's group or the people you want. " : null}
         Each language uses fixed, hand-written wording — nothing is machine-translated on the fly.
       </p>
       {sheet && t && <TelegramSend chats={t.chats} text={text} audience="seniors" language={lang} onSent={() => window.dispatchEvent(new CustomEvent(TODO_DONE, { detail: "send" }))} onClose={() => setSheet(false)} />}

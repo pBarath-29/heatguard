@@ -40,12 +40,17 @@ function Telegram() {
   return (
     <section className={card} id="telegram">
       <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Send className="h-5 w-5 text-telegram" /> Telegram</h2>
-      <p className="mt-1 text-sm text-ink-500">Send the daily heat message straight to your centre's Telegram group or channel. Seniors and volunteers get it by joining the group — HeatGuard never stores anyone's personal Telegram account.</p>
+      <p className="mt-1 text-sm text-ink-500">Send the daily heat message to your centre's Telegram group. HeatGuard never stores anyone's personal Telegram account.</p>
 
       {!t.configured || !t.bot ? (
-        <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
-          <b>{t.bot_error ?? "Telegram isn't switched on yet."}</b>
-          <p className="mt-1">The HeatGuard team needs to create the HeatGuard bot with @BotFather and add its token to the app (secret <code>heatguard/telegram_bot_token</code>). Until then, use <b>Share on Telegram</b> on My plan to pick people yourself.</p>
+        <div className="mt-4 space-y-3">
+          <div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-950">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <p><b>Ready to use — no setup needed.</b> On My plan, <b>Share on Telegram</b> opens Telegram with the message filled in. Pick your centre's group (or the people you want) and send.</p>
+          </div>
+          {t.bot_error ? <p className="text-sm text-amber-800">{t.bot_error}</p> : (
+            <p className="text-[13px] text-ink-500">Optional, for later: the HeatGuard team can switch on a HeatGuard bot that posts to your group in one tap and keeps a record of what was sent.</p>
+          )}
         </div>
       ) : !t.can_manage ? (
         <div className="mt-4 flex items-start gap-3 rounded-2xl bg-ink-50 p-4 text-sm text-ink-700"><Lock className="mt-0.5 h-4 w-4 shrink-0" />Only coordinators can link groups and send messages. {t.chats.length > 0 && <>Linked: {t.chats.map((c) => c.title).join(", ")}.</>}</div>
