@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, Navigation, RefreshCw, RotateCcw, Send, Share2, Siren, Snowflake, Sun, ThermometerSun,
+  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, RefreshCw, RotateCcw, Send, Share2, Siren, Sun, ThermometerSun,
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -23,10 +23,6 @@ const LEVEL = {
   hot: { bg: "bg-gradient-to-br from-brand-600 to-amber-500", icon: Sun, chip: "Take care" },
   normal: { bg: "bg-gradient-to-br from-emerald-600 to-teal-500", icon: Sun, chip: "Routine day" },
 };
-
-function walkMinutes(km: number) {
-  return Math.max(1, Math.round(km * 15));   // a gentle walking pace for seniors (~4 km/h)
-}
 
 function plainReasons(a: CheckinRow & { distance_km: number }) {
   const out: string[] = [];
@@ -287,23 +283,6 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
         )}
       </section>
 
-      {cool && (
-        <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Snowflake className="h-5 w-5 text-sky-600" /> Nearest cool place</h2>
-          <p className="mt-1 text-sm text-ink-500">Free and air-conditioned — suggest it to seniors whose homes get too hot.</p>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sky-50 p-4">
-            <div>
-              <div className="text-[17px] font-semibold text-ink-900">{cool.name}</div>
-              <div className="text-sm text-ink-600">{cool.space_type} · about {walkMinutes(cool.distance_km)} min walk ({cool.distance_km} km)</div>
-            </div>
-            <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&origin=${place.latitude},${place.longitude}&destination=${cool.latitude},${cool.longitude}&travelmode=walking`}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:brightness-110"><Navigation className="h-4 w-4" /> Directions</a>
-          </div>
-          {data.cool_spaces.length > 1 && (
-            <p className="mt-3 text-sm text-ink-500">Also nearby: {data.cool_spaces.slice(1).map((c) => `${c.name} (${walkMinutes(c.distance_km)} min)`).join(", ")}.</p>
-          )}
-        </section>
-      )}
 
       <div className="flex items-center gap-1.5 px-1 pb-2 text-sm text-ink-500"><MapPin className="h-4 w-4 shrink-0" /> {title(place.address)}</div>
     </div>
