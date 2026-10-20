@@ -1,31 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Check, Copy, Info, RefreshCw } from "lucide-react";
+import { Info, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button, ErrorState, PageHeader, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 
-const SUGGESTED = [
-  "Which areas in Bukit Merah should we check on first tomorrow?",
-  "Which areas near Toa Payoh have the most seniors living there?",
-  "Which priority areas are more than 1 km from a cool place?",
-  "Which areas might get very hot tomorrow?",
-];
 const SLOW_MS = 20_000;
 
 /* The Genie space runs inside this page only. The sandbox lets it work normally (sign-in, questions, charts, CSV downloads,
    copying) but blocks pop-ups and new tabs, so links inside Genie can't take people out to the Databricks website. */
 const SANDBOX = "allow-scripts allow-same-origin allow-forms allow-downloads allow-modals";
-
-function CopyChip({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  const copy = async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); } catch { /* still readable */ } };
-  return (
-    <button onClick={copy} title="Copy, then paste into Genie" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-3 py-1.5 text-[13px] text-ink-700 hover:border-brand-300">
-      {done ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-ink-400" />}{text}
-    </button>
-  );
-}
 
 export default function AskPage() {
   const links = useQuery({ queryKey: ["genie-embed"], queryFn: api.genieEmbed, staleTime: Infinity, retry: 1 });
@@ -78,10 +62,6 @@ export default function AskPage() {
             )}
           </div>
 
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
-            <span className="shrink-0 self-center text-xs font-medium text-ink-500">Try asking:</span>
-            {SUGGESTED.map((q) => <CopyChip key={q} text={q} />)}
-          </div>
         </div>
       )}
       <p className="mt-4 flex items-start gap-1.5 text-xs text-ink-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />Answers come from HeatGuard's data and can occasionally be wrong — double-check anything important on My plan.</p>
