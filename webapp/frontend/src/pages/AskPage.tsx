@@ -232,7 +232,7 @@ function GenieEmbed({ onSimple }: { onSimple: () => void }) {
             ) : (
               <div className="max-w-md space-y-3">
                 <p className="font-medium text-ink-900">Genie is taking longer than usual.</p>
-                <p className="text-sm text-ink-600">Check your connection and reload, open it in Databricks, or use simple answers.</p>
+                <p className="text-sm text-ink-600">If you aren't signed in to Databricks in this browser, open it in Databricks once to sign in, then reload. Or use simple answers.</p>
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button size="sm" variant="primary" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => setReloads((n) => n + 1)}>Reload</Button>
                   <Button size="sm" onClick={onSimple} icon={<MessagesSquare className="h-3.5 w-3.5" />}>Simple answers</Button>
@@ -242,6 +242,14 @@ function GenieEmbed({ onSimple }: { onSimple: () => void }) {
           </div>
         )}
       </div>
+
+      {loaded && (
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-2xl bg-ink-50 px-4 py-2.5 text-[13px] text-ink-600">
+          <Info className="h-3.5 w-3.5 shrink-0" />Blank box or a sign-in page?
+          <a href={links.data.open_url} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline">Open in Databricks</a> once to sign in, then
+          <button onClick={() => setReloads((n) => n + 1)} className="font-medium text-brand-700 underline">reload</button>.
+        </p>
+      )}
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
         <span className="shrink-0 self-center text-xs font-medium text-ink-500">Try asking:</span>
