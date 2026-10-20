@@ -10,7 +10,7 @@
 # MAGIC
 # MAGIC | Table | What it holds |
 # MAGIC |---|---|
-# MAGIC | `app_welfare_residents` | The residents a volunteer team checks on. **Here: fictional demo residents only.** |
+# MAGIC | `app_welfare_residents` | The residents a volunteer team checks on, with the area (URA subzone) their block is in. **Here: fictional demo residents only.** |
 # MAGIC | `app_welfare_events` | Every change, appended and never overwritten (completed, unchecked, unsuccessful attempt, remark, follow-up on/off) — the audit trail |
 # MAGIC | `app_volunteers` | Who may open welfare checks (`volunteer` or `coordinator`) — checked on every request by the app |
 # MAGIC
@@ -59,11 +59,35 @@ demo = [
     ("demo-11", "Demo Resident K", "61", "Telok Blangah Way", "#12-427", "Prefers Malay"),
     ("demo-12", "Demo Resident L", "62", "Telok Blangah Way", "#01-431", "Daughter visits on weekends"),
 ]
-rows = [(rid, name, blk, street, f"{unit} (demo)", "(demo)", f"+65 0000 {i:04d} (demo)", note, True)
+import time
+
+import requests
+
+def block_location(blk, street):
+    """OneMap location of an HDB block (exact block number + street only), used to find the resident's area. Not stored."""
+    for attempt in range(5):                         # OneMap answers "429 too many requests" to quick bursts: wait and retry
+        time.sleep(1.5 * (attempt + 1))
+        r = requests.get("https://www.onemap.gov.sg/api/common/elastic/search",
+                         params={"searchVal": f"{blk} {street}", "returnGeom": "Y", "getAddrDetails": "Y", "pageNum": 1}, timeout=20)
+        if r.status_code == 200:
+            res = r.json(); break
+    else:
+        return (None, None)
+    hits = [h for h in res.get("results", []) if h.get("BLK_NO") == blk and h.get("ROAD_NAME", "").upper() == street.upper()]
+    return (float(hits[0]["LATITUDE"]), float(hits[0]["LONGITUDE"])) if hits else (None, None)
+
+rows = [(rid, name, blk, street, f"{unit} (demo)", "(demo)", f"+65 0000 {i:04d} (demo)", note, True, *block_location(blk, street))
         for i, (rid, name, blk, street, unit, note) in enumerate(demo, start=1)]
+cols = "resident_id STRING, name STRING, block STRING, street STRING, unit STRING, postal STRING, phone STRING, notes STRING, demo BOOLEAN, lat DOUBLE, lon DOUBLE"
+spark.createDataFrame(rows, cols).createOrReplaceTempView("demo_residents")
+# The URA subzone that contains each block, so each area page can show the seniors who live there (coordinates are dropped)
+placed = spark.sql(f"""SELECT d.* EXCEPT (lat, lon), s.subzone_name FROM demo_residents d
+                       LEFT JOIN {S}.silver_subzones s ON d.lat IS NOT NULL AND st_contains(st_geomfromgeojson(s.geometry_geojson), st_point(d.lon, d.lat, 4326))""")
+
+if "subzone_name" not in spark.table(f"{S}.app_welfare_residents").columns:
+    spark.sql(f"ALTER TABLE {S}.app_welfare_residents ADD COLUMNS (subzone_name STRING COMMENT 'URA subzone the block is in (from its OneMap location)')")
 spark.sql(f"DELETE FROM {S}.app_welfare_residents WHERE demo = true")
-(spark.createDataFrame(rows, "resident_id STRING, name STRING, block STRING, street STRING, unit STRING, postal STRING, phone STRING, notes STRING, demo BOOLEAN")
- .selectExpr("*", "current_timestamp() AS created_at").write.mode("append").saveAsTable(f"{S}.app_welfare_residents"))
+placed.selectExpr("*", "current_timestamp() AS created_at").write.mode("append").option("mergeSchema", "true").saveAsTable(f"{S}.app_welfare_residents")
 
 if dbutils.widgets.get("reset_events") == "yes":
     spark.sql(f"DELETE FROM {S}.app_welfare_events")
@@ -71,7 +95,7 @@ if dbutils.widgets.get("reset_events") == "yes":
 email = dbutils.widgets.get("coordinator_email").strip().lower()
 spark.sql(f"DELETE FROM {S}.app_volunteers WHERE lower(email) = '{email}'")
 spark.sql(f"INSERT INTO {S}.app_volunteers VALUES ('{email}', 'coordinator', current_timestamp())")
-display(spark.sql(f"SELECT resident_id, name, block, street, unit, phone, demo FROM {S}.app_welfare_residents ORDER BY resident_id"))
+display(spark.sql(f"SELECT resident_id, name, block, street, unit, subzone_name, demo FROM {S}.app_welfare_residents ORDER BY resident_id"))
 
 # COMMAND ----------
 
