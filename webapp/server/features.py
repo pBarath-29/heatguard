@@ -326,11 +326,9 @@ class ComposeBody(BaseModel):
     level: str = Field(pattern="^(very_hot|hot|normal)$")
     for_date: dt.date
     language: str = Field(pattern="^(en|zh|ms|ta)$")
-    audience: str = Field(pattern="^(seniors|staff)$")
     centre: str = Field(default="", max_length=80)
     cool: Optional[str] = Field(default=None, max_length=80)
     haze: bool = False
-    focus_areas: list[str] = Field(default_factory=list, max_length=5)
 
 
 @router.get("/message/languages")
@@ -341,11 +339,10 @@ def message_languages():
 @router.post("/message/compose")
 def message_compose(b: ComposeBody):
     try:
-        text = msg.compose(level=b.level, day=b.for_date, today=hr.today_sgt(), language=b.language, audience=b.audience,
-                           centre=b.centre, cool=b.cool, haze=b.haze, focus_areas=[f[:60] for f in b.focus_areas])
+        text = msg.compose(level=b.level, day=b.for_date, today=hr.today_sgt(), language=b.language, centre=b.centre, cool=b.cool, haze=b.haze)
     except msg.MessageError as e:
         raise HTTPException(400, detail=str(e))
-    return {"text": text, "language": b.language, "audience": b.audience}
+    return {"text": text, "language": b.language}
 
 
 # ======================================================================= Telegram (groups and channels only)
@@ -431,7 +428,7 @@ def telegram_unlink(chat_id: str, request: Request):
 class SendBody(BaseModel):
     chat_ids: list[str] = Field(min_length=1, max_length=10)
     text: str = Field(min_length=1, max_length=tg.MAX_TEXT)
-    audience: Optional[str] = Field(default=None, pattern="^(seniors|staff|test)$")
+    audience: Optional[str] = Field(default=None, pattern="^(seniors|test)$")
     language: Optional[str] = Field(default=None, pattern="^(en|zh|ms|ta)$")
     client_send_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
 

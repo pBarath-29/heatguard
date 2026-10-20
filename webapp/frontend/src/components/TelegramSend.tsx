@@ -15,7 +15,7 @@ export default function TelegramSend({ chats, text, audience, language, onClose,
   const sendId = useRef(newId());                       // same id on retry → the server never posts twice
   const panel = useRef<HTMLDivElement>(null);
   const m = useMutation({ mutationFn: () => features.telegramSend({ chat_ids: picked, text, audience, language, client_send_id: sendId.current }),
-    onSuccess: (r) => { if (r.sent > 0 && audience === "seniors") onSent?.(); } });
+    onSuccess: (r) => { if (r.sent > 0) onSent?.(); } });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !m.isPending) onClose(); };

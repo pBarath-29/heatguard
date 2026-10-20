@@ -29,7 +29,7 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
 
     if level == "very_hot":
         items = [
-            _item("send", w("Tonight", "Now"), "Send the heat reminder to your seniors, and the briefing to staff and volunteers.",
+            _item("send", w("Tonight", "Now"), "Send the heat reminder to your seniors.",
                   "Gives everyone time to plan their day before the heat.", messages),
             _item("call", w("Tomorrow, before 11 am", "Before 11 am"),
                   f"Call or visit seniors on your list who live alone or have heart or lung conditions. Start with {focus}.",

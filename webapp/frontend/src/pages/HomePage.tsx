@@ -6,7 +6,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import TelegramSend from "../components/TelegramSend";
-import { Button, ErrorState, inputClass, Segmented, Skeleton } from "../components/ui";
+import { Button, ErrorState, inputClass, Skeleton } from "../components/ui";
 import { ApiError, api, features, type CheckinRow, type ComposeInput, type Lang, type NearResponse } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
 
@@ -138,12 +138,11 @@ const LANG_KEY = "heatguard.messageLanguage";
 
 function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centre: string; cool: string | null }) {
   const [lang, setLang] = useState<Lang>(() => (["en", "zh", "ms", "ta"].includes(store.get(LANG_KEY) ?? "") ? store.get(LANG_KEY) as Lang : "en"));
-  const [audience, setAudience] = useState<"seniors" | "staff">("seniors");
   const [text, setText] = useState("");
   const [edited, setEdited] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const input: ComposeInput = { level: plan.level, for_date: plan.for_date ?? "", language: lang, audience, centre, cool, haze: !!plan.haze, focus_areas: plan.focus_areas };
+  const input: ComposeInput = { level: plan.level, for_date: plan.for_date ?? "", language: lang, centre, cool, haze: !!plan.haze };
   const q = useQuery({ queryKey: ["compose", input], queryFn: () => features.compose(input), enabled: !!plan.for_date, staleTime: Infinity });
   const tg = useQuery({ queryKey: ["telegram"], queryFn: features.telegram, staleTime: 60_000, retry: false });
   useEffect(() => { if (q.data) { setText(q.data.text); setEdited(false); } }, [q.data]);
@@ -164,12 +163,11 @@ function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centr
     <section id="message" className="scroll-mt-20 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-ink-900">Message ready to send</h2>
-          <p className="mt-0.5 text-sm text-ink-500">HeatGuard's safety steps in plain words. You can edit it before sending.</p>
+          <h2 className="text-lg font-semibold text-ink-900">Message for your seniors</h2>
+          <p className="mt-0.5 text-sm text-ink-500">Ready to send, in plain words and their language. You can edit it before sending.</p>
         </div>
       </div>
       <div className="mt-4 space-y-3">
-        <Segmented value={audience} onChange={setAudience} options={[{ value: "seniors", label: "For seniors" }, { value: "staff", label: "For staff & volunteers" }]} />
         <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 no-scrollbar" role="radiogroup" aria-label="Language">
           {LANGS.map(({ code, label }) => (
             <button key={code} role="radio" aria-checked={lang === code} onClick={() => setLang(code)} lang={code}
@@ -214,7 +212,7 @@ function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centr
         {!canSend && !t?.can_manage ? "Share opens Telegram so you can choose who gets it. " : null}
         Each language uses fixed, hand-written wording — nothing is machine-translated on the fly.
       </p>
-      {sheet && t && <TelegramSend chats={t.chats} text={text} audience={audience} language={lang} onSent={() => window.dispatchEvent(new CustomEvent(TODO_DONE, { detail: "send" }))} onClose={() => setSheet(false)} />}
+      {sheet && t && <TelegramSend chats={t.chats} text={text} audience="seniors" language={lang} onSent={() => window.dispatchEvent(new CustomEvent(TODO_DONE, { detail: "send" }))} onClose={() => setSheet(false)} />}
     </section>
   );
 }

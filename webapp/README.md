@@ -20,7 +20,7 @@ linked Telegram groups or channels by the HeatGuard bot (`server/telegram.py`). 
 
 | Page | What it shows |
 |---|---|
-| **My plan** (`/`) | Asks once for the centre's postal code, then: plain-words outlook, tick-off to-do list, ready-to-send message (seniors or staff, 4 languages, one-tap WhatsApp), nearby areas to check first, nearest cool place |
+| **My plan** (`/`) | Asks once for the centre's postal code, then: plain-words outlook, tick-off to-do list, to-do list in time order with links, a message for seniors in 4 languages (send to the centre's Telegram group, share or copy), nearby areas, nearest cool place |
 | **Area** (`/area/<name>`) | Why to check this area, what to do, nearest cool place, message button |
 | **Weather** (`/weather`) | Today (default) and tomorrow for a place: measured heat, temperature and humidity now; NEA 2-hour and 24-hour forecasts; heat hour by hour (measured hours and estimated hours clearly marked); HeatGuard's afternoon forecast. Uses Singapore time and rolls over at midnight |
 | **Activity check** (`/activity`) | Is a planned outdoor activity safe? Lower risk / Caution / High risk / Insufficient data, with reasons, precautions, safer times, a shorter option, nearby indoor venues and a warm-nights note |
@@ -38,13 +38,12 @@ the `gold_replay_*` / `ml_*` tables and `docs/decision-log.md`.
 |---|---|
 | `GET /api/near?postal=<6 digits>` | Centre location (OneMap), tomorrow's heat there, plain-language plan and to-do, nearby areas, nearest cool places |
 | `GET /api/area/{subzone}` | One area's row from the check-in list |
-| `POST /api/message` | `{subzone, language, audience, centre?}` → ready-to-send message |
 | `POST /api/genie` | `{question, conversation_id?}` → Genie answer |
 | `GET /api/locate?q=` | OneMap search (postal code, address or place) |
 | `GET /api/weather?lat&lon` | Today/tomorrow: live NEA readings and forecasts, today's measured heat by hour, HeatGuard forecast with hourly estimates |
 | `POST /api/activity-check` | `{activity, exertion, latitude, longitude, place?, day, start, duration_min, older_adults}` → status, reasons, precautions, alternatives |
 | `GET /api/cool-places?lat&lon` | Nearest CCs and libraries with walking estimate and directions link |
-| `POST /api/message/compose` | `{level, for_date, language: en/zh/ms/ta, audience, centre, cool, haze, focus_areas}` → message text |
+| `POST /api/message/compose` | `{level, for_date, language: en/zh/ms/ta, centre, cool, haze}` → message for seniors |
 | `GET /api/telegram`, `POST /api/telegram/discover`, `POST/DELETE /api/telegram/chats`, `POST /api/telegram/send` | Bot status and linked groups; find groups the bot is in; link/unlink (coordinators); send with a `client_send_id` so a retry never posts twice |
 | `GET /api/me`, `GET /api/welfare`, `POST /api/welfare/{id}/events` | Signed-in role; demo welfare list; append-only events (`expected_version` gives 409 on conflict, `client_event_id` makes retries safe) |
 | `GET /api/health`, `POST /api/refresh` | Status; clear the 5-minute cache |

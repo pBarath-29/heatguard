@@ -10,7 +10,7 @@ TOMORROW = dt.date(2026, 10, 20)       # Tuesday
 
 
 def compose(**kw):
-    args = dict(level="very_hot", day=TOMORROW, today=TODAY, language="en", audience="seniors", centre="Radin Mas CC", cool="Radin Mas CC")
+    args = dict(level="very_hot", day=TOMORROW, today=TODAY, language="en", centre="Radin Mas CC", cool="Radin Mas CC")
     return m.compose(**{**args, **kw})
 
 
@@ -32,10 +32,9 @@ def test_today_and_other_days():
 
 # ---------------- messages ----------------
 @pytest.mark.parametrize("lang", list(m.LANGUAGES))
-@pytest.mark.parametrize("audience", m.AUDIENCES)
 @pytest.mark.parametrize("level", m.LEVELS)
-def test_every_combination_fills_in_without_placeholders(lang, audience, level):
-    text = compose(language=lang, audience=audience, level=level, haze=True, focus_areas=["Telok Blangah Rise"])
+def test_every_combination_fills_in_without_placeholders(lang, level):
+    text = compose(language=lang, level=level, haze=True)
     assert "{" not in text and "}" not in text
     assert "Radin Mas CC" in text
 
@@ -57,18 +56,13 @@ def test_haze_advice_only_when_hazy():
     assert "haze" not in compose(haze=False).lower()
 
 
-def test_staff_briefing_lists_focus_areas_and_steps():
-    text = compose(audience="staff", level="hot", focus_areas=["Telok Blangah Rise", "Everton Park"])
-    assert "Telok Blangah Rise and Everton Park" in text and "1. Tonight" in text and "NEA" in text
-
-
 def test_missing_names_have_sensible_defaults():
     assert "the nearest Community Club" in compose(cool=None)
     assert "Hello from your centre!" in compose(centre="  ")
 
 
 def test_bad_inputs_rejected():
-    for bad in (dict(language="fr"), dict(audience="everyone"), dict(level="scorching")):
+    for bad in (dict(language="fr"), dict(level="scorching")):
         with pytest.raises(m.MessageError):
             compose(**bad)
 

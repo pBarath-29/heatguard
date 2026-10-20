@@ -215,8 +215,7 @@ export interface Resident {
 }
 
 export type Lang = "en" | "zh" | "ms" | "ta";
-export interface ComposeInput { level: "very_hot" | "hot" | "normal"; for_date: string; language: Lang; audience: "seniors" | "staff"; centre: string;
-  cool: string | null; haze: boolean; focus_areas: string[] }
+export interface ComposeInput { level: "very_hot" | "hot" | "normal"; for_date: string; language: Lang; centre: string; cool: string | null; haze: boolean }
 export interface TelegramChat { chat_id: string; title: string; chat_type: string; linked_by?: string; linked_at?: string }
 export interface TelegramStatus { configured: boolean; bot: { username: string; name: string } | null; bot_error: string | null; chats: TelegramChat[]; can_manage: boolean }
 
@@ -227,7 +226,7 @@ export const features = {
   coolPlaces: (lat: number, lon: number) => request<{ places: CoolPlace[]; heat_now: { value_c: number; band: Band; station: string } | null; coverage: string; source: string }>(`/api/cool-places?lat=${lat}&lon=${lon}`),
   me: () => request<{ signed_in: boolean; role: string | null; can_view_welfare: boolean }>("/api/me"),
   welfare: () => request<{ residents: Resident[]; demo: boolean; notice: string }>("/api/welfare"),
-  compose: (body: ComposeInput) => request<{ text: string; language: string; audience: string }>("/api/message/compose", { method: "POST", body: JSON.stringify(body) }),
+  compose: (body: ComposeInput) => request<{ text: string; language: string }>("/api/message/compose", { method: "POST", body: JSON.stringify(body) }),
   telegram: () => request<TelegramStatus>("/api/telegram"),
   telegramDiscover: () => request<{ chats: (TelegramChat & { linked: boolean })[] }>("/api/telegram/discover", { method: "POST" }),
   telegramLink: (chat_id: string) => request<{ chats: TelegramChat[] }>("/api/telegram/chats", { method: "POST", body: JSON.stringify({ chat_id }) }),
