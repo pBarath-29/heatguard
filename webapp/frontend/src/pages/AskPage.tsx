@@ -1,8 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
-import { ArrowUp, Download, Info, MessagesSquare, RotateCcw, Sparkles, User } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import clsx from "clsx";
+import { ArrowUp, Check, ChevronDown, Copy, Download, ExternalLink, Info, LifeBuoy, MessagesSquare, RefreshCw, RotateCcw, Sparkles, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Button, Card, PageHeader } from "../components/ui";
+import { Button, Card, ErrorState, PageHeader, Segmented, Skeleton } from "../components/ui";
 import { ApiError, api, type GenieAnswer, type GenieTable } from "../lib/api";
 import { downloadCsv } from "../lib/format";
 
@@ -75,7 +76,7 @@ function Answer({ answer }: { answer: GenieAnswer }) {
   );
 }
 
-export default function AskPage() {
+function SimpleAsk() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [conversation, setConversation] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -100,9 +101,8 @@ export default function AskPage() {
   const suggestions = last?.role === "assistant" && last.answer ? last.answer.suggestions.slice(0, 3) : [];
 
   return (
-    <div className="flex min-h-[calc(100vh-7rem)] flex-col">
-      <PageHeader title="Ask a question" subtitle="Ask in your own words about areas, seniors and cool places — HeatGuard looks it up for you."
-        right={messages.length > 0 && <Button icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>New conversation</Button>} />
+    <div className="flex min-h-[calc(100vh-14rem)] flex-col">
+      {messages.length > 0 && <div className="mb-4 flex justify-end"><Button icon={<RotateCcw className="h-4 w-4" />} onClick={reset}>New conversation</Button></div>}
 
       <div className="flex-1 space-y-5 pb-36">
         {messages.length === 0 && (
@@ -151,7 +151,7 @@ export default function AskPage() {
         <div ref={bottom} />
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); ask(input); }} className="sticky bottom-4 z-10">
+      <form onSubmit={(e) => { e.preventDefault(); ask(input); }} className="sticky bottom-24 z-10 lg:bottom-4">
         <div className="flex items-center gap-2 rounded-2xl border border-ink-200 bg-surface p-2 shadow-lift focus-within:border-brand-400 focus-within:ring-4 focus-within:ring-brand-500/10">
           <input value={input} onChange={(e) => setInput(e.target.value)} maxLength={500} disabled={mutation.isPending}
             placeholder="e.g. Which areas in Toa Payoh should we check first tomorrow?" aria-label="Your question"
@@ -163,5 +163,115 @@ export default function AskPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- embedded Genie (steps, SQL and charts)
+const MODE_KEY = "heatguard.askMode";
+type Mode = "genie" | "simple";
+const readMode = (): Mode => { try { return localStorage.getItem(MODE_KEY) === "simple" ? "simple" : "genie"; } catch { return "genie"; } };
+const SLOW_MS = 20_000;
+
+function CopyChip({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); } catch { /* still readable */ } };
+  return (
+    <button onClick={copy} title="Copy, then paste into Genie" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-ink-200 bg-surface px-3 py-1.5 text-[13px] text-ink-700 hover:border-brand-300">
+      {done ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-ink-400" />}{text}
+    </button>
+  );
+}
+
+function GenieEmbed({ onSimple }: { onSimple: () => void }) {
+  const links = useQuery({ queryKey: ["genie-embed"], queryFn: api.genieEmbed, staleTime: Infinity, retry: 1 });
+  const [reloads, setReloads] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [offline, setOffline] = useState(typeof navigator !== "undefined" && !navigator.onLine);
+  useEffect(() => {
+    setLoaded(false); setSlow(false);
+    const t = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(t);
+  }, [reloads, links.data?.embed_url]);
+  useEffect(() => {
+    const on = () => setOffline(false), off = () => setOffline(true);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+
+  if (links.isPending) return <Skeleton className="h-[70dvh] min-h-[480px] rounded-3xl" />;
+  if (links.isError) return (
+    <div className="space-y-3">
+      <ErrorState error={links.error} onRetry={() => links.refetch()} title="Couldn't open Genie" />
+      <div className="text-center"><Button onClick={onSimple} icon={<MessagesSquare className="h-4 w-4" />}>Use simple answers instead</Button></div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => setReloads((n) => n + 1)}>Reload</Button>
+        <a href={links.data.open_url} target="_blank" rel="noreferrer"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-ink-200 bg-surface px-3 text-[13px] font-medium text-ink-700 shadow-sm hover:bg-ink-50 sm:h-8">
+          <ExternalLink className="h-3.5 w-3.5" />Open in Databricks</a>
+        <span className="text-xs text-ink-500">Shows Genie's steps, the data it used, and charts when they help.</span>
+      </div>
+
+      {offline && <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-900" role="alert">You're offline. Genie will load again when the connection is back.</p>}
+
+      <div className="relative h-[70dvh] min-h-[480px] overflow-hidden rounded-3xl border border-ink-200 bg-surface shadow-card">
+        <iframe key={reloads} src={links.data.embed_url} title="HeatGuard Genie" allow="clipboard-write" onLoad={() => setLoaded(true)}
+          className={clsx("h-full w-full border-0 transition-opacity", loaded ? "opacity-100" : "opacity-0")} />
+        {!loaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center" aria-live="polite">
+            {!slow ? (
+              <>
+                <span className="flex gap-1">{[0, 150, 300].map((d) => <span key={d} className="h-2.5 w-2.5 animate-bounce rounded-full bg-brand-400" style={{ animationDelay: `${d}ms` }} />)}</span>
+                <p className="text-sm text-ink-600">Opening Genie… the first time can take 10–20 seconds.</p>
+              </>
+            ) : (
+              <div className="max-w-md space-y-3">
+                <p className="font-medium text-ink-900">Genie is taking longer than usual.</p>
+                <p className="text-sm text-ink-600">Check your connection and reload, open it in Databricks, or use simple answers.</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button size="sm" variant="primary" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => setReloads((n) => n + 1)}>Reload</Button>
+                  <Button size="sm" onClick={onSimple} icon={<MessagesSquare className="h-3.5 w-3.5" />}>Simple answers</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar">
+        <span className="shrink-0 self-center text-xs font-medium text-ink-500">Try asking:</span>
+        {SUGGESTED.slice(0, 4).map((q) => <CopyChip key={q} text={q} />)}
+      </div>
+
+      <details className="group rounded-2xl border border-ink-200 bg-surface p-4 text-sm text-ink-700">
+        <summary className="flex cursor-pointer list-none items-center gap-2 font-medium text-ink-900">
+          <LifeBuoy className="h-4 w-4 text-ink-500" />Genie not showing properly?<ChevronDown className="ml-auto h-4 w-4 transition group-open:rotate-180" />
+        </summary>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li><b>Asked to sign in?</b> Sign in with your Databricks account — once is enough.</li>
+          <li><b>Blank box or "can't be embedded"?</b> Your browser may block third-party cookies: allow them for <code>databricks.com</code>, or use <b>Open in Databricks</b>. An admin may also need to switch on the <i>Embed Genie as an iframe</i> preview and approve this site under Settings → Security → Embed dashboards.</li>
+          <li><b>"You don't have access"?</b> Ask the HeatGuard team to share the Genie space and its data with your account.</li>
+          <li>You can always switch to <button onClick={onSimple} className="font-medium text-brand-700 underline">simple answers</button>, which work without any of this.</li>
+        </ul>
+      </details>
+    </div>
+  );
+}
+
+export default function AskPage() {
+  const [mode, setModeState] = useState<Mode>(readMode);
+  const setMode = (m: Mode) => { setModeState(m); try { localStorage.setItem(MODE_KEY, m); } catch { /* not remembered */ } };
+  return (
+    <>
+      <PageHeader title="Ask a question" subtitle="Ask in your own words about areas, seniors and cool places — Genie looks it up in HeatGuard's data."
+        right={<Segmented<Mode> value={mode} onChange={setMode} options={[{ value: "genie", label: "Genie (steps & charts)" }, { value: "simple", label: "Simple answers" }]} />} />
+      {mode === "genie" ? <GenieEmbed onSimple={() => setMode("simple")} /> : <SimpleAsk />}
+      <p className="mt-4 flex items-start gap-1.5 text-xs text-ink-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />Answers come from HeatGuard's data and can occasionally be wrong — double-check anything important on My plan.</p>
+    </>
   );
 }

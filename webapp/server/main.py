@@ -166,6 +166,14 @@ def genie(body: AskBody):
     return ai.ask_genie(body.question.strip(), body.conversation_id)
 
 
+@app.get("/api/genie/embed")
+def genie_embed():
+    """Links for the embedded Genie space (shows Genie's steps, SQL and charts). Each viewer uses their own Databricks sign-in.
+    Needs the workspace to allow embedding on this app's domain (Settings → Security → Embed dashboards) and the
+    'Embed Genie as an iframe' preview."""
+    return ai.embed_links()
+
+
 
 # ---------------- frontend ----------------
 

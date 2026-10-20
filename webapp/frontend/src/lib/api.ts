@@ -171,6 +171,7 @@ export const api = {
   genie: (question: string, conversation_id?: string | null) =>
     request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
+  genieEmbed: () => request<{ embed_url: string; open_url: string }>("/api/genie/embed"),
 };
 
 // ---------------------------------------------------------------- coordinator features
