@@ -153,4 +153,10 @@ def test_every_step_with_a_link_points_to_a_real_page():
     for level in ("very_hot", "hot", "normal"):
         for t in ids(level, haze=True)[1]["todo"]:
             if t["action"]:
-                assert t["action"]["to"].split("?")[0] in ("#areas", "/welfare", "/activity")
+                assert t["action"]["to"].split("?")[0] in ("#areas", "/welfare", "/activity") or t["action"]["to"].startswith("/area/")
+
+
+def test_call_step_opens_the_first_area_to_check():
+    _, out = ids("hot")
+    call = next(t for t in out["todo"] if t["id"] == "call")
+    assert call["action"] == {"label": "Open Telok Blangah Rise", "to": "/area/TELOK%20BLANGAH%20RISE"}

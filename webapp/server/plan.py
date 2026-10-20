@@ -8,6 +8,7 @@ bands: hottest 11 am – 4 pm on very hot days, 12 – 4 pm on hot days).
 from __future__ import annotations
 
 import datetime as dt
+import urllib.parse
 
 EMERGENCY = "If a senior is confused, faints or collapses in the heat, call 995 and move them somewhere cool."
 
@@ -26,6 +27,7 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
     focus = " and ".join(names) if names else "the areas nearest your centre"
     areas = ("Choose an area", "#areas")
     welfare = ("Open welfare checks", "/welfare")
+    first_area = (f"Open {names[0]}", "/area/" + urllib.parse.quote(names[0].upper())) if names else welfare   # its seniors are listed there
 
     if level == "very_hot":
         items = [
@@ -33,7 +35,7 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
                   "Each area's message names the cool place nearest to them. Sending it the evening before gives everyone time to plan.", areas),
             _item("call", w("Tomorrow, before 11 am", "Before 11 am"),
                   f"Call or visit seniors on your list who live alone or have heart or lung conditions. Start with {focus}.",
-                  "Reach them before the hottest hours, while there is still time to help.", welfare),
+                  "Reach them before the hottest hours, while there is still time to help.", first_area),
             _item("activities", w("Tomorrow, before 11 am", "Before 11 am"),
                   "Move any outdoor activity planned for 11 am – 4 pm indoors, or to the early morning.",
                   "Heat stress is highest from 11 am to 4 pm.", ("Check an activity", "/activity")),
@@ -50,7 +52,7 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
                   "Each area's message names the cool place nearest to them.", areas),
             _item("call", w("Tomorrow morning", "This morning"),
                   f"Phone seniors on your list who live alone. Start with {focus}.",
-                  "Remind them to stay in from 12 to 4 pm and to keep drinking water.", welfare),
+                  "Remind them to stay in from 12 to 4 pm and to keep drinking water.", first_area),
             _item("activities", w("Tomorrow morning", "This morning"),
                   "Check any outdoor activity planned for 12 – 4 pm.",
                   "It may need shade, water breaks, a shorter session or a cooler time.", ("Check an activity", "/activity")),

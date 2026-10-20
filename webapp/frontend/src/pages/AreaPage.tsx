@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { ArrowLeft, CheckCircle2, CloudFog, MapPin, Navigation, Snowflake, Sun, ThermometerSun, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import SeniorMessage from "../components/SeniorMessage";
+import WelfareList from "../components/WelfareList";
 import { ErrorState, Skeleton } from "../components/ui";
 import { ApiError, api } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
@@ -80,6 +81,12 @@ export default function AreaPage() {
         <ul className="mt-3 space-y-2.5">
           {steps.map((t) => <li key={t} className="flex gap-3 text-[16px] leading-relaxed text-emerald-950"><CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-emerald-600" />{t}</li>)}
         </ul>
+      </section>
+
+      <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Users className="h-5 w-5 text-ink-400" /> Your seniors in {title(r.subzone_name)}</h2>
+        <p className="mb-4 mt-1 text-sm text-ink-500">From your welfare list. Mark each check done, or note why it couldn't be done.</p>
+        <WelfareList subzone={r.subzone_name} />
       </section>
 
       {(!postal || !centre.isPending) && (

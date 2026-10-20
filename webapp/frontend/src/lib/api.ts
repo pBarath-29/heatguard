@@ -209,6 +209,7 @@ export interface ActivityResult {
 export interface WelfareEvent { action: string; outcome: string | null; remark: string | null; by_email: string; at: string }
 export interface Resident {
   resident_id: string; name: string; block: string; street: string; unit: string; postal: string; phone: string; notes: string; demo: boolean;
+  subzone_name: string | null;
   state: { completed: boolean; outcome: string | null; follow_up: boolean; version: number; updated_at: string | null; updated_by: string | null;
            status: "pending" | "completed" | "follow_up" | "unsuccessful" };
   history: WelfareEvent[];

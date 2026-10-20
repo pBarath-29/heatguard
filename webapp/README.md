@@ -21,11 +21,11 @@ linked Telegram groups or channels by the HeatGuard bot (`server/telegram.py`). 
 | Page | What it shows |
 |---|---|
 | **My plan** (`/`) | Asks once for the centre's postal code, then: plain-words outlook, a tick-off to-do list in time order with links, nearby areas, nearest cool place |
-| **Area** (`/area/<name>`) | Why to check this area, what to do, a message for its seniors in 4 languages naming their nearest cool place (Share on Telegram or copy), nearest cool place |
+| **Area** (`/area/<name>`) | Why to check this area, what to do, the seniors on your welfare list who live there, a message for its seniors in 4 languages naming their nearest cool place (Share on Telegram or copy), nearest cool place |
 | **Weather** (`/weather`) | Today (default) and tomorrow for a place: measured heat, temperature and humidity now; NEA 2-hour and 24-hour forecasts; heat hour by hour (measured hours and estimated hours clearly marked); HeatGuard's afternoon forecast. Uses Singapore time and rolls over at midnight |
 | **Activity check** (`/activity`) | Is a planned outdoor activity safe? Lower risk / Caution / High risk / Insufficient data, with reasons, precautions, safer times, a shorter option, nearby indoor venues and a warm-nights note |
 | **Cool places** (`/cool-places`) | Nearest Community Clubs and libraries (map + list) from your location or a search, walking estimate, directions; opening hours shown as "not verified" |
-| **Welfare checks** (`/welfare`) | Volunteers/coordinators only. **Fictional demo residents.** Mark done (with undo), unsuccessful attempt with outcome and remark, follow-up queue, full history of who changed what |
+| **Welfare checks** (`/welfare`) | Volunteers/coordinators only. **Fictional demo residents** at real HDB blocks. Full list with an area filter; each area page also shows the seniors who live there. Mark done (with undo), unsuccessful attempt with outcome and remark, follow-up queue, full history of who changed what |
 | **Ask a question** (`/ask`) | Genie answers in plain words (technical columns and SQL are hidden) |
 | **Settings** (`/settings`) | Light / dark / same as device; Telegram setup (find the centre's group, link it, send a test) |
 
