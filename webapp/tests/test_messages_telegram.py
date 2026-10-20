@@ -153,4 +153,4 @@ def test_every_step_with_a_link_points_to_a_real_page():
     for level in ("very_hot", "hot", "normal"):
         for t in ids(level, haze=True)[1]["todo"]:
             if t["action"]:
-                assert t["action"]["to"].split("?")[0] in ("#message", "/welfare", "/activity")
+                assert t["action"]["to"].split("?")[0] in ("#areas", "/welfare", "/activity")

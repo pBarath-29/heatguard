@@ -20,8 +20,8 @@ linked Telegram groups or channels by the HeatGuard bot (`server/telegram.py`). 
 
 | Page | What it shows |
 |---|---|
-| **My plan** (`/`) | Asks once for the centre's postal code, then: plain-words outlook, a tick-off to-do list in time order with links, a message for seniors in 4 languages (send to the centre's Telegram group, share or copy), nearby areas, nearest cool place |
-| **Area** (`/area/<name>`) | Why to check this area, what to do, nearest cool place, message button |
+| **My plan** (`/`) | Asks once for the centre's postal code, then: plain-words outlook, a tick-off to-do list in time order with links, nearby areas, nearest cool place |
+| **Area** (`/area/<name>`) | Why to check this area, what to do, a message for its seniors in 4 languages naming their nearest cool place (Share on Telegram or copy), nearest cool place |
 | **Weather** (`/weather`) | Today (default) and tomorrow for a place: measured heat, temperature and humidity now; NEA 2-hour and 24-hour forecasts; heat hour by hour (measured hours and estimated hours clearly marked); HeatGuard's afternoon forecast. Uses Singapore time and rolls over at midnight |
 | **Activity check** (`/activity`) | Is a planned outdoor activity safe? Lower risk / Caution / High risk / Insufficient data, with reasons, precautions, safer times, a shorter option, nearby indoor venues and a warm-nights note |
 | **Cool places** (`/cool-places`) | Nearest Community Clubs and libraries (map + list) from your location or a search, walking estimate, directions; opening hours shown as "not verified" |

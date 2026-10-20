@@ -6,6 +6,7 @@ Shared record of what we learned, what we decided and why, and open questions (r
 
 | Date | Decision | Why | Alternatives considered |
 |---|---|---|---|
+| 20 Oct 2026 | **Seniors' message moved to each area page** (signed by the centre, naming that area's nearest cool place); My plan's first step points to the areas; area "What to do" follows the heat level like the message | Seniors in different areas have different nearest Community Clubs; one centre-wide message could only name one | Single message on My plan |
 | 20 Oct 2026 | **Dropped the staff & volunteers briefing**; the message card only writes the message for seniors | It repeated the to-do list, and coordinators brief their own volunteers; one message keeps the screen simple | Keep both audiences |
 | 20 Oct 2026 | **Removed Block Radar** (page, API, notebook 08, `gold_hdb_blocks*` tables) and the per-area "Write a message" button; the message lives only on My plan | Coordinators asked for fewer, simpler features; one message per centre per day is what they actually send | Keep both |
 | 20 Oct 2026 | **Messages use fixed, hand-written translations** (English, Chinese, Malay, Tamil) with localised dates, instead of Llama rewording/translating | The model's translations varied run to run and could drift from the rulebook; fixed wording is consistent, instant and can be checked once by native speakers (still to do) | Llama 3.3 70B with a stricter prompt; a larger model |

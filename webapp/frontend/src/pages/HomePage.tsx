@@ -1,13 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowRight, Building2, Check, ChevronDown, Copy, CloudFog, MapPin, RefreshCw, RotateCcw, Send, Share2, Siren, Sun, ThermometerSun,
+  ArrowRight, Building2, Check, ChevronDown, CloudFog, MapPin, RefreshCw, Siren, Sun, ThermometerSun,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import TelegramSend from "../components/TelegramSend";
 import { Button, ErrorState, inputClass, Skeleton } from "../components/ui";
-import { ApiError, api, features, type CheckinRow, type ComposeInput, type Lang, type NearResponse } from "../lib/api";
+import { api, type CheckinRow, type NearResponse } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
 
 // ---------- remembered on this device only ----------
@@ -75,7 +74,7 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
   const toggle = (id: string) => setDone((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]));
   const count = plan.todo.filter((t) => done.includes(t.id)).length;
   const next = plan.todo.find((t) => !done.includes(t.id));
-  const goToMessage = () => document.getElementById("message")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const goTo = (to: string) => document.getElementById(to.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
@@ -108,7 +107,7 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
                   <p className={clsx("mt-0.5 text-[16px] leading-relaxed", on ? "text-ink-500 line-through decoration-ink-300" : "text-ink-900")}>{t.text}</p>
                   {t.why && !on && <p className="mt-1 text-sm text-ink-500">{t.why}</p>}
                   {t.action && !on && (t.action.to.startsWith("#") ? (
-                    <button onClick={goToMessage} className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-100 px-3 text-sm font-medium text-ink-800 hover:bg-ink-200">
+                    <button onClick={() => goTo(t.action!.to)} className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-100 px-3 text-sm font-medium text-ink-800 hover:bg-ink-200">
                       {t.action.label}<ArrowRight className="h-4 w-4" /></button>
                   ) : (
                     <Link to={t.action.to} className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink-100 px-3 text-sm font-medium text-ink-800 hover:bg-ink-200">
@@ -129,90 +128,6 @@ function Todo({ plan, postal }: { plan: NearResponse["plan"]; postal: string }) 
   );
 }
 
-const LANGS: { code: Lang; label: string }[] = [{ code: "en", label: "English" }, { code: "zh", label: "中文" }, { code: "ms", label: "Melayu" }, { code: "ta", label: "தமிழ்" }];
-const LANG_KEY = "heatguard.messageLanguage";
-
-function MessageCard({ plan, centre, cool }: { plan: NearResponse["plan"]; centre: string; cool: string | null }) {
-  const [lang, setLang] = useState<Lang>(() => (["en", "zh", "ms", "ta"].includes(store.get(LANG_KEY) ?? "") ? store.get(LANG_KEY) as Lang : "en"));
-  const [text, setText] = useState("");
-  const [edited, setEdited] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [sheet, setSheet] = useState(false);
-  const input: ComposeInput = { level: plan.level, for_date: plan.for_date ?? "", language: lang, centre, cool, haze: !!plan.haze };
-  const q = useQuery({ queryKey: ["compose", input], queryFn: () => features.compose(input), enabled: !!plan.for_date, staleTime: Infinity });
-  const tg = useQuery({ queryKey: ["telegram"], queryFn: features.telegram, staleTime: 60_000, retry: false });
-  useEffect(() => { if (q.data) { setText(q.data.text); setEdited(false); } }, [q.data]);
-  useEffect(() => { store.set(LANG_KEY, lang); }, [lang]);
-  const box = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {                                       // grow with the text so nothing is hidden on phones
-    const el = box.current; if (!el) return;
-    el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`;
-  }, [text, q.isPending]);
-
-  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* text stays selectable */ } };
-  const t = tg.data;
-  const canSend = !!(t?.configured && t.bot && t.can_manage && t.chats.length > 0);
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(text)}`;
-  const ready = !!text.trim() && !q.isPending;
-
-  return (
-    <section id="message" className="scroll-mt-20 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-ink-900">Message for your seniors</h2>
-          <p className="mt-0.5 text-sm text-ink-500">Ready to send, in plain words and their language. You can edit it before sending.</p>
-        </div>
-      </div>
-      <div className="mt-4 space-y-3">
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 no-scrollbar" role="radiogroup" aria-label="Language">
-          {LANGS.map(({ code, label }) => (
-            <button key={code} role="radio" aria-checked={lang === code} onClick={() => setLang(code)} lang={code}
-              className={clsx("h-10 shrink-0 rounded-full border px-4 text-[15px] font-medium transition", lang === code ? "border-ink-900 bg-ink-900 text-ink-50" : "border-ink-200 bg-surface text-ink-700 hover:border-ink-400")}>{label}</button>
-          ))}
-        </div>
-      </div>
-      <div className="mt-4">
-        {q.isPending ? (
-          <div className="space-y-2 rounded-2xl bg-ink-50 p-4" aria-label="Preparing your message"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-11/12" /><Skeleton className="h-4 w-4/5" /></div>
-        ) : q.isError ? (
-          <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">{q.error instanceof ApiError ? q.error.message : "Couldn't prepare the message."} <button onClick={() => q.refetch()} className="font-medium underline">Try again</button></div>
-        ) : (
-          <>
-            <label htmlFor="msg" className="sr-only">Message text</label>
-            <textarea id="msg" lang={lang} value={text} onChange={(e) => { setText(e.target.value); setEdited(true); }} ref={box} rows={6}
-              className="w-full resize-none overflow-hidden rounded-2xl border border-ink-200 bg-ink-50 p-4 text-[16px] leading-relaxed text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" />
-            {edited && <button onClick={() => { setText(q.data!.text); setEdited(false); }} className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-brand-700"><RotateCcw className="h-3.5 w-3.5" />Undo my changes</button>}
-          </>
-        )}
-      </div>
-      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-        {canSend ? (
-          <button type="button" disabled={!ready} onClick={() => setSheet(true)}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telegram px-5 text-base font-semibold text-white shadow-sm transition hover:brightness-110 active:scale-[0.99] disabled:opacity-50">
-            <Send className="h-5 w-5" /> Send to Telegram
-          </button>
-        ) : (
-          <a href={ready ? shareUrl : undefined} target="_blank" rel="noreferrer" aria-disabled={!ready}
-            className={clsx("inline-flex h-12 items-center justify-center gap-2 rounded-xl px-5 text-base font-semibold text-white shadow-sm transition", ready ? "bg-telegram hover:brightness-110" : "pointer-events-none bg-ink-300")}>
-            <Send className="h-5 w-5" /> Share on Telegram
-          </a>
-        )}
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          {canSend && <a href={ready ? shareUrl : undefined} target="_blank" rel="noreferrer" className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-ink-200 bg-surface px-4 text-[15px] font-medium text-ink-700 hover:bg-ink-50"><Share2 className="h-5 w-5" />Share</a>}
-          <Button className={clsx("h-12 px-4 text-[15px]", !canSend && "col-span-2")} disabled={!ready} onClick={copy} icon={copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}>{copied ? "Copied" : "Copy"}</Button>
-        </div>
-      </div>
-      <p className="mt-3 text-[13px] text-ink-500">
-        {canSend ? <>Sends to {t!.chats.map((c) => c.title).join(", ")}. </> : null}
-        {!canSend && t?.configured && t.bot && t.can_manage ? <>To send in one tap, <Link to="/settings" className="font-medium text-brand-700">link your Telegram group in Settings</Link>. </> : null}
-        {!canSend && !(t?.configured && t.bot && t.can_manage) ? "Share opens Telegram with the message filled in — pick your centre's group or the people you want. " : null}
-        Each language uses fixed, hand-written wording — nothing is machine-translated on the fly.
-      </p>
-      {sheet && t && <TelegramSend chats={t.chats} text={text} audience="seniors" language={lang} onSent={() => window.dispatchEvent(new CustomEvent(TODO_DONE, { detail: "send" }))} onClose={() => setSheet(false)} />}
-    </section>
-  );
-}
-
 function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; onChange: () => void }) {
   const [details, setDetails] = useState(false);
   const [allAreas, setAllAreas] = useState(false);
@@ -225,7 +140,6 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
     const order: Record<string, number> = { "Start here": 1, "Check in": 2, Routine: 3 };
     return [...data.areas].sort((a, b) => order[a.tier] - order[b.tier] || b.risk_score - a.risk_score);
   }, [data.areas]);
-  const cool = data.cool_spaces[0];
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -260,11 +174,10 @@ function Plan({ data, postal, onChange }: { data: NearResponse; postal: string; 
       </section>
 
       <Todo plan={plan} postal={postal} />
-      <MessageCard plan={plan} centre={title(place.name)} cool={cool?.name ?? null} />
 
-      <section className="rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
+      <section id="areas" className="scroll-mt-20 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
         <h2 className="text-lg font-semibold text-ink-900">Areas near you to check first</h2>
-        <p className="mt-1 text-sm text-ink-500">Within 1.5 km of your centre, most at risk first.</p>
+        <p className="mt-1 text-sm text-ink-500">Within 1.5 km of your centre, most at risk first. Open an area for its message to seniors.</p>
         <div className="mt-3 divide-y divide-ink-100">
           {(allAreas ? areas : areas.slice(0, 3)).map((a, i) => (
             <Link key={a.subzone_name} to={`/area/${encodeURIComponent(a.subzone_name)}`} className="group flex items-center gap-4 py-3.5">

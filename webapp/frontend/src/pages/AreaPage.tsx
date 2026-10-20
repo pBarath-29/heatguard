@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ArrowLeft, CheckCircle2, CloudFog, MapPin, Navigation, Snowflake, Sun, ThermometerSun, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import SeniorMessage from "../components/SeniorMessage";
 import { ErrorState, Skeleton } from "../components/ui";
 import { ApiError, api } from "../lib/api";
 import { dayLabel, num, pct, title } from "../lib/format";
@@ -16,8 +17,12 @@ function walkMinutes(km: number) {
   return Math.max(1, Math.round(km * 15));
 }
 
+function centrePostal() { try { return localStorage.getItem("heatguard.centrePostal"); } catch { return null; } }
+
 export default function AreaPage() {
   const { name = "" } = useParams();
+  const postal = centrePostal();
+  const centre = useQuery({ queryKey: ["near", postal], queryFn: () => api.near(postal!), enabled: !!postal, retry: false });   // cached from My plan: signs the message
   const navigate = useNavigate();
   const q = useQuery({ queryKey: ["area", name], queryFn: () => api.area(name), retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 1 });
   const back = (e: React.MouseEvent) => { if (window.history.length > 1) { e.preventDefault(); navigate(-1); } };
@@ -41,7 +46,12 @@ export default function AreaPage() {
   if (r.pa_data_published && r.pa_pct_one_person >= 0.15) reasons.push(`About ${pct(r.pa_pct_one_person)} of households in ${title(r.planning_area)} are people living alone.`);
   if (r.cool_space_km >= 1) reasons.push(`The nearest cool place is ${r.cool_space_km} km away — a long walk on a hot day.`);
   if (["Unhealthy", "Very unhealthy", "Hazardous"].includes(r.psi_band ?? "")) reasons.push(`The haze is ${r.psi_band?.toLowerCase()}.`);
-  const steps = r.action.split(/(?<=\.)\s+/).filter(Boolean);
+  const cool = r.nearest_cool_space || "the nearest Community Club";
+  const steps = veryHot   // same advice and hours as the seniors' message and My plan (very hot: 11 am – 4 pm; hot: 12 – 4 pm)
+    ? ["Call or visit seniors who live alone before 11 am.", "Remind them to stay indoors from 11 am to 4 pm and to drink water often.", `If their home gets too hot, suggest ${cool}.`]
+    : hot ? ["Phone seniors who live alone in the morning.", "Remind them to avoid going out from 12 pm to 4 pm and to drink water.", `If their home gets too hot, suggest ${cool}.`]
+    : ["Routine check-ins. No extra heat steps needed."];
+  if (["Unhealthy", "Very unhealthy", "Hazardous"].includes(r.psi_band ?? "")) steps.push("Check that seniors with heart or lung conditions have their medicine, and ask them to keep windows closed.");
   const address = [r.nearest_cool_space_street, r.nearest_cool_space_postal && `Singapore ${r.nearest_cool_space_postal}`].filter(Boolean).join(", ");
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.nearest_cool_space} Singapore ${r.nearest_cool_space_postal ?? ""}`)}`;
 
@@ -71,6 +81,11 @@ export default function AreaPage() {
           {steps.map((t) => <li key={t} className="flex gap-3 text-[16px] leading-relaxed text-emerald-950"><CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-emerald-600" />{t}</li>)}
         </ul>
       </section>
+
+      {(!postal || !centre.isPending) && (
+        <SeniorMessage area={title(r.subzone_name)} level={veryHot ? "very_hot" : hot ? "hot" : "normal"} forDate={r.for_date}
+          centre={centre.data ? title(centre.data.place.name) : ""} cool={r.nearest_cool_space} haze={["Unhealthy", "Very unhealthy", "Hazardous"].includes(r.psi_band ?? "")} />
+      )}
 
       <section className="rounded-3xl border border-ink-200 bg-surface p-6 shadow-card">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-ink-900"><Snowflake className="h-5 w-5 text-sky-600" /> Nearest cool place</h2>

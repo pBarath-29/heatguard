@@ -24,13 +24,13 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
     w = lambda tomorrow, today_: tomorrow if ahead else today_                       # noqa: E731
     names = [f for f in focus_areas if f][:2]
     focus = " and ".join(names) if names else "the areas nearest your centre"
-    messages = ("Open the messages", "#message")
+    areas = ("Choose an area", "#areas")
     welfare = ("Open welfare checks", "/welfare")
 
     if level == "very_hot":
         items = [
-            _item("send", w("Tonight", "Now"), "Send the heat reminder to your seniors.",
-                  "Gives everyone time to plan their day before the heat.", messages),
+            _item("send", w("Tonight", "Now"), "Send the heat reminder to seniors in each area below.",
+                  "Each area's message names the cool place nearest to them. Sending it the evening before gives everyone time to plan.", areas),
             _item("call", w("Tomorrow, before 11 am", "Before 11 am"),
                   f"Call or visit seniors on your list who live alone or have heart or lung conditions. Start with {focus}.",
                   "Reach them before the hottest hours, while there is still time to help.", welfare),
@@ -46,8 +46,8 @@ def todo(level: str, *, haze: bool, focus_areas: list[str], for_date: dt.date | 
         ]
     elif level == "hot":
         items = [
-            _item("send", w("Tonight", "Now"), "Send the heat reminder to your seniors.",
-                  "A short reminder the evening before is the easiest way to reach everyone.", messages),
+            _item("send", w("Tonight", "Now"), "Send the heat reminder to seniors in each area below.",
+                  "Each area's message names the cool place nearest to them.", areas),
             _item("call", w("Tomorrow morning", "This morning"),
                   f"Phone seniors on your list who live alone. Start with {focus}.",
                   "Remind them to stay in from 12 to 4 pm and to keep drinking water.", welfare),
