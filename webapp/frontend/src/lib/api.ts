@@ -129,8 +129,6 @@ export interface AccuracyResponse {
 export interface AboutResponse { weights: ScoreWeight[]; rulebook: { trigger: string; level: string; action: string }[] }
 export interface CoolSpace { name: string; space_type: string; latitude: number; longitude: number; street: string | null; postal_code: string | null }
 
-export interface GenieTable { columns: string[]; rows: (string | number | null)[][] }
-export interface GenieAnswer { conversation_id: string; text: string[]; queries: { description: string | null; sql: string | null; table: GenieTable | null }[]; suggestions: string[] }
 
 export class ApiError extends Error {
   status: number;
@@ -168,10 +166,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   area: (name: string) => request<AreaResponse>(`/api/area/${encodeURIComponent(name)}`),
-  genie: (question: string, conversation_id?: string | null) =>
-    request<GenieAnswer>("/api/genie", { method: "POST", body: JSON.stringify({ question, conversation_id: conversation_id ?? null }) }),
   near: (postal: string) => request<NearResponse>(`/api/near?postal=${encodeURIComponent(postal)}`),
-  genieEmbed: () => request<{ embed_url: string; open_url: string }>("/api/genie/embed"),
+  genieEmbed: () => request<{ embed_url: string }>("/api/genie/embed"),
 };
 
 // ---------------------------------------------------------------- coordinator features

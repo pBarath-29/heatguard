@@ -26,7 +26,7 @@ linked Telegram groups or channels by the HeatGuard bot (`server/telegram.py`). 
 | **Activity check** (`/activity`) | Is a planned outdoor activity safe? Lower risk / Caution / High risk / Insufficient data, with reasons, precautions, safer times, a shorter option, nearby indoor venues and a warm-nights note |
 | **Cool places** (`/cool-places`) | Nearest Community Clubs and libraries (map + list) from your location or a search, walking estimate, directions; opening hours shown as "not verified" |
 | **Welfare checks** (`/welfare`) | Volunteers/coordinators only. **Fictional demo residents** at real HDB blocks. Full list with an area filter; each area page also shows the seniors who live there. Mark done (with undo), unsuccessful attempt with outcome and remark, follow-up queue, full history of who changed what |
-| **Ask a question** (`/ask`) | **Embedded Genie** (its steps, SQL and charts; each viewer uses their own Databricks sign-in) with **Simple answers** as a fallback (Genie Conversation API, plain tables) |
+| **Ask a question** (`/ask`) | **Embedded Genie** (its thought process, SQL and charts), using the viewer's Databricks sign-in; sandboxed so it can't open new tabs or the Databricks site |
 | **Settings** (`/settings`) | Light / dark / same as device; Telegram setup (find the centre's group, link it, send a test) |
 
 Technical material (model accuracy, replay of past hot days, Singapore-wide ranking) is kept out of the website; it lives in the notebooks,
@@ -38,8 +38,7 @@ the `gold_replay_*` / `ml_*` tables and `docs/decision-log.md`.
 |---|---|
 | `GET /api/near?postal=<6 digits>` | Centre location (OneMap), tomorrow's heat there, plain-language plan and to-do, nearby areas, nearest cool places |
 | `GET /api/area/{subzone}` | One area's row from the check-in list |
-| `GET /api/genie/embed` | Embed and open links for the Genie space |
-| `POST /api/genie` | `{question, conversation_id?}` → Genie answer |
+| `GET /api/genie/embed` | Embed link for the Genie space |
 | `GET /api/locate?q=` | OneMap search (postal code, address or place) |
 | `GET /api/weather?lat&lon` | Today/tomorrow: live NEA readings and forecasts, today's measured heat by hour, HeatGuard forecast with hourly estimates |
 | `POST /api/activity-check` | `{activity, exertion, latitude, longitude, place?, day, start, duration_min, older_adults}` → status, reasons, precautions, alternatives |

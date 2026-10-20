@@ -6,9 +6,6 @@ import pathlib
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from typing import Optional
-
-from pydantic import BaseModel, Field
 
 from . import ai, plan
 from .db import S, ConfigError, DataError, clear_cache, query, records, today_sgt
@@ -156,19 +153,10 @@ def centre_plan(point, nearby, cool, all_rows):
 
 # ---------------- Genie ----------------
 
-class AskBody(BaseModel):
-    question: str = Field(min_length=1, max_length=500)
-    conversation_id: Optional[str] = None
-
-
-@app.post("/api/genie")
-def genie(body: AskBody):
-    return ai.ask_genie(body.question.strip(), body.conversation_id)
-
-
 @app.get("/api/genie/embed")
 def genie_embed():
-    """Links for the embedded Genie space (shows Genie's steps, SQL and charts). Each viewer uses their own Databricks sign-in.
+    """Link for the embedded Genie space (shows Genie's steps, SQL and charts). It uses the viewer's Databricks sign-in — the same one
+    that opened this app.
     Needs the workspace to allow embedding on this app's domain (Settings → Security → Embed dashboards) and the
     'Embed Genie as an iframe' preview."""
     return ai.embed_links()
