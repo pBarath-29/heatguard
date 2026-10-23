@@ -160,3 +160,14 @@ def test_call_step_opens_the_first_area_to_check():
     _, out = ids("hot")
     call = next(t for t in out["todo"] if t["id"] == "call")
     assert call["action"] == {"label": "Open Telok Blangah Rise", "to": "/area/TELOK%20BLANGAH%20RISE"}
+
+
+def test_all_four_languages_in_one_message_in_order():
+    text = m.compose_all(level="hot", day=TOMORROW, today=TODAY, centre="Radin Mas CC", cool="Radin Mas CC", haze=False)
+    parts = text.split("\n\n")
+    assert len(parts) == 4
+    assert parts[0].startswith("Hello from Radin Mas CC")                 # English
+    assert "问候您" in parts[1]                                            # Chinese
+    assert parts[2].startswith("Salam sejahtera")                        # Malay
+    assert "வணக்கம்" in parts[3]                                         # Tamil
+    assert len(text) < tg.MAX_TEXT                                       # still fits in one Telegram message

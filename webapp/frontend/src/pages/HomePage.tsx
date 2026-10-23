@@ -41,7 +41,7 @@ function Welcome({ onSet }: { onSet: (postal: string) => void }) {
     <div className="mx-auto max-w-xl py-6 md:py-14">
       <img src="/favicon.svg" alt="" className="h-14 w-14 rounded-2xl shadow-lift" />
       <h1 className="mt-6 text-3xl font-semibold tracking-tight text-ink-900 md:text-4xl">Plan tomorrow's heat check-ins in one minute</h1>
-      <p className="mt-3 text-lg leading-relaxed text-ink-600">HeatGuard tells you, every evening, how hot tomorrow afternoon will be around your centre, what to do, and gives you a message ready to send to your seniors.</p>
+      <p className="mt-3 text-lg leading-relaxed text-ink-600">HeatGuard tells you, every afternoon, how hot tomorrow afternoon will be around your centre, what to do, and gives you a message ready to send to your seniors.</p>
       <form onSubmit={(e) => { e.preventDefault(); if (ok) onSet(v); }} className="mt-8 rounded-3xl border border-ink-200 bg-surface p-5 shadow-card md:p-6">
         <label className="block text-[15px] font-medium text-ink-800" htmlFor="postal">Your centre's postal code</label>
         <div className="mt-2 flex flex-col gap-3 sm:flex-row">

@@ -59,7 +59,7 @@ export default function Layout() {
       <footer className="hidden border-t border-ink-200 bg-surface lg:block">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-ink-500">
           <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> No real personal information — public data only; welfare checks use fictional demo residents.</span>
-          <span>Forecast updated every evening at about 7 pm, using NEA weather data.</span>
+          <span>Forecast updated every afternoon at about 4 pm, using NEA weather data.</span>
         </div>
       </footer>
 

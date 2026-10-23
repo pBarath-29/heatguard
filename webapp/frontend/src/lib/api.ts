@@ -213,7 +213,7 @@ export interface Resident {
 }
 
 export type Lang = "en" | "zh" | "ms" | "ta";
-export interface ComposeInput { level: "very_hot" | "hot" | "normal"; for_date: string; language: Lang; centre: string; cool: string | null; haze: boolean }
+export interface ComposeInput { level: "very_hot" | "hot" | "normal"; for_date: string; language: Lang | "all"; centre: string; cool: string | null; haze: boolean }
 export interface TelegramChat { chat_id: string; title: string; chat_type: string; linked_by?: string; linked_at?: string }
 export interface TelegramStatus { configured: boolean; bot: { username: string; name: string } | null; bot_error: string | null; chats: TelegramChat[]; can_manage: boolean }
 

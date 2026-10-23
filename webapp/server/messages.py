@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 
 LANGUAGES = {"en": "English", "zh": "中文", "ms": "Bahasa Melayu", "ta": "தமிழ்"}
+ALL_ORDER = ("en", "zh", "ms", "ta")          # one message with all four official languages, in this order
 LEVELS = ("very_hot", "hot", "normal")
 
 # ------------------------------------------------------------------------------------------------ dates
@@ -122,6 +123,11 @@ def compose(*, level: str, day: dt.date, today: dt.date, language: str, centre: 
                                     "ta": "அருகிலுள்ள சமூக மன்றம்"}[language]
     when = when_text(day, today, language)
     return _seniors(language, level, when, centre, cool, haze)
+
+
+def compose_all(**kwargs) -> str:
+    """The same message in English, Chinese, Malay and Tamil, one after another, separated by a blank line."""
+    return "\n\n".join(compose(language=lang, **kwargs) for lang in ALL_ORDER)
 
 
 def _seniors(lang, level, when, centre, cool, haze):

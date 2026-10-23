@@ -194,11 +194,11 @@ def activity_check(b: ActivityBody):
     if fc is None or not fc["hourly"]:
         return {**base, "status": "Insufficient data", "reasons": [
             f"HeatGuard has no heat forecast for {day:%A %d %B} yet." if fc is None else "The usual daily heat pattern for this location is missing.",
-            "Tomorrow's forecast is published every evening at about 7 pm."], "precautions": ["Check NEA's heat stress advisory before the activity."],
+            "Tomorrow's forecast is published every afternoon at about 4 pm."], "precautions": ["Check NEA's heat stress advisory before the activity."],
             "alternatives": [], "indoor_options": [], "forecast": None, "sources": ["NEA via data.gov.sg"], "nea_note": nea_err}
     if fc["made_on"] < (day - dt.timedelta(days=1)).isoformat():
         return {**base, "status": "Insufficient data", "reasons": [f"The latest forecast was made on {fc['made_on']}, which is too old for {day:%A %d %B}."],
-                "precautions": ["Try again after this evening's update."], "alternatives": [], "indoor_options": [], "forecast": None, "sources": []}
+                "precautions": ["Try again after this afternoon's update (about 4 pm)."], "alternatives": [], "indoor_options": [], "forecast": None, "sources": []}
     a = hr.assess_window(fc["hourly"], start, b.duration_min, older_adults=b.older_adults, exertion=b.exertion,
                          prob_high=fc["prob_high"], alert_threshold=fc["alert_threshold"], rain_expected=rain)
     not_before = (now_sgt + dt.timedelta(minutes=30)).time() if b.day == "today" else None
@@ -325,7 +325,7 @@ def welfare_event(resident_id: str, body: EventBody, request: Request):
 class ComposeBody(BaseModel):
     level: str = Field(pattern="^(very_hot|hot|normal)$")
     for_date: dt.date
-    language: str = Field(pattern="^(en|zh|ms|ta)$")
+    language: str = Field(pattern="^(en|zh|ms|ta|all)$")
     centre: str = Field(default="", max_length=80)
     cool: Optional[str] = Field(default=None, max_length=80)
     haze: bool = False
@@ -339,7 +339,8 @@ def message_languages():
 @router.post("/message/compose")
 def message_compose(b: ComposeBody):
     try:
-        text = msg.compose(level=b.level, day=b.for_date, today=hr.today_sgt(), language=b.language, centre=b.centre, cool=b.cool, haze=b.haze)
+        args = dict(level=b.level, day=b.for_date, today=hr.today_sgt(), centre=b.centre, cool=b.cool, haze=b.haze)
+        text = msg.compose_all(**args) if b.language == "all" else msg.compose(language=b.language, **args)
     except msg.MessageError as e:
         raise HTTPException(400, detail=str(e))
     return {"text": text, "language": b.language}
@@ -429,7 +430,7 @@ class SendBody(BaseModel):
     chat_ids: list[str] = Field(min_length=1, max_length=10)
     text: str = Field(min_length=1, max_length=tg.MAX_TEXT)
     audience: Optional[str] = Field(default=None, pattern="^(seniors|test)$")
-    language: Optional[str] = Field(default=None, pattern="^(en|zh|ms|ta)$")
+    language: Optional[str] = Field(default=None, pattern="^(en|zh|ms|ta|all)$")
     client_send_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9-]+$")
 
 

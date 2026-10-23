@@ -47,7 +47,7 @@ function Periods({ periods }: { periods: NeaPeriod[] }) {
 }
 
 function ForecastCard({ fc, label }: { fc: PointForecast | null; label: string }) {
-  if (!fc) return <div className="rounded-2xl bg-ink-50 p-4 text-sm text-ink-600">No HeatGuard heat forecast for {label} yet — it is published every evening at about 7 pm.</div>;
+  if (!fc) return <div className="rounded-2xl bg-ink-50 p-4 text-sm text-ink-600">No HeatGuard heat forecast for {label} yet — it is published every afternoon at about 4 pm.</div>;
   const w = heatWords(fc.peak_c);
   return (
     <div className="rounded-2xl border border-ink-200 bg-surface p-4">
