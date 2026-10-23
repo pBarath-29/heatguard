@@ -48,9 +48,41 @@ w = WorkspaceClient()
 
 # COMMAND ----------
 
+import time
+
+SOURCE = {"heatguard-web": "/Workspace/Users/yubrajb2907@gmail.com/heatguard/webapp"}   # code to redeploy if the app lost its deployment
+
+
 def state(name):
     a = w.apps.get(name)
     return str(getattr(a.compute_status, "state", "")).split(".")[-1], str(getattr(a.app_status, "state", "")).split(".")[-1]
+
+
+def deploying(a):
+    return any(d is not None and "IN_PROGRESS" in str(getattr(getattr(d, "status", None), "state", ""))
+               for d in (a.pending_deployment, a.active_deployment))
+
+
+def wait_until_running(name, minutes=15):
+    """After a start, Free Edition redeploys the app in the background (the app shows UNAVAILABLE meanwhile). Wait for it; if the app
+    says it has no deployment and nothing is deploying, deploy the source code again."""
+    deadline = time.time() + minutes * 60
+    redeployed = False
+    while time.time() < deadline:
+        a = w.apps.get(name)
+        app = str(getattr(a.app_status, "state", "")).split(".")[-1]
+        if app == "RUNNING":
+            return
+        message = str(getattr(a.app_status, "message", "") or "")
+        if not redeployed and not deploying(a) and "not been deployed" in message and name in SOURCE:
+            print(f"{name}: no active deployment, redeploying {SOURCE[name]}")
+            from databricks.sdk.service.apps import AppDeployment
+            try:
+                w.apps.deploy(name, app_deployment=AppDeployment(source_code_path=SOURCE[name]))
+            except TypeError:                     # older SDKs take the path directly
+                w.apps.deploy(name, source_code_path=SOURCE[name])
+            redeployed = True
+        time.sleep(20)
 
 failures = []
 for name in APPS:
@@ -62,6 +94,7 @@ for name in APPS:
             compute = "STOPPED"
         if compute != "ACTIVE" or app != "RUNNING":
             w.apps.start_and_wait(name, timeout=datetime.timedelta(minutes=15))
+        wait_until_running(name)
         compute, app = state(name)
         print(f"{name}: after  → compute {compute}, app {app}")
         if app != "RUNNING":
